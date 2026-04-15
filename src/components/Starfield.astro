@@ -1,0 +1,326 @@
+---
+// Full-viewport star background with integrated blackhole distortion.
+//
+// Layers (drawn per-frame, back to front):
+//  1. Nebulae (particle clouds)
+//  2. Dim static stars — ALL lensed when near blackhole
+//  3. Named bright stars with twinkle + diffraction spikes — lensed
+//  4. Blackhole (drawn last so it's always on top):
+//     event horizon black disk, photon ring, accretion glow, Einstein ring
+---
+
+<canvas id="starfield" aria-hidden="true"></canvas>
+
+<script>
+  const canvas = document.getElementById('starfield') as HTMLCanvasElement | null;
+  if (canvas) {
+    const ctx = canvas.getContext('2d', { alpha: true });
+    if (ctx) {
+      const DARK_PAL = ['#a9bfff','#d6e0ff','#ffffff','#fff4c0','#ffcc80','#ff9a60','#ff6a50'];
+      const LIGHT_PAL = ['#111','#222','#000','#333','#1a1a1a','#2a2a2a','#111'];
+
+      function isDark() {
+        return document.documentElement.getAttribute('data-theme') !== 'light';
+      }
+      function pal() { return isDark() ? DARK_PAL : LIGHT_PAL; }
+      function ci(h: number) {
+        return h < 0.10 ? 0 : h < 0.24 ? 1 : h < 0.50 ? 2 : h < 0.70 ? 3 : h < 0.85 ? 4 : h < 0.96 ? 5 : 6;
+      }
+
+      type Star = { x: number; y: number; r: number; alpha: number; ci: number };
+      type Named = {
+        name: string; x: number; y: number; r: number;
+        baseAlpha: number; ci: number;
+        phase: number; freq: number; spike: number;
+      };
+      type NebPart = { x: number; y: number; r: number; color: string };
+
+      let statics: Star[] = [];
+      let named: Named[] = [];
+      let nebParts: NebPart[] = [];
+      let pageW = 0, pageH = 0;
+
+      const NAMED_STARS = [
+        { name:'Sirius',     ci:1, r:2.0, spike:0.9 },
+        { name:'Betelgeuse', ci:5, r:2.5, spike:0.95},
+        { name:'Rigel',      ci:0, r:1.8, spike:0.85},
+        { name:'Vega',       ci:2, r:1.7, spike:0.8 },
+        { name:'Aldebaran',  ci:5, r:1.9, spike:0.7 },
+        { name:'Antares',    ci:6, r:2.2, spike:0.9 },
+        { name:'Polaris',    ci:3, r:1.6, spike:0.75},
+        { name:'Deneb',      ci:2, r:1.8, spike:0.8 },
+        { name:'Altair',     ci:2, r:1.5, spike:0.65},
+        { name:'Spica',      ci:0, r:1.7, spike:0.7 },
+        { name:'Canopus',    ci:3, r:1.9, spike:0.85},
+        { name:'Procyon',    ci:3, r:1.5, spike:0.6 },
+      ];
+
+      function makeNebula(cx: number, cy: number, w: number, h: number, dark: boolean): NebPart[] {
+        const parts: NebPart[] = [];
+        const count = 60 + Math.floor(Math.random() * 80);
+        const hues = dark
+          ? ['rgba(60,25,90,','rgba(25,55,110,','rgba(90,25,50,','rgba(20,70,70,','rgba(80,50,25,']
+          : ['rgba(0,0,0,'];
+        const base = hues[Math.floor(Math.random() * hues.length)];
+        for (let i = 0; i < count; i++) {
+          const gx = (Math.random() + Math.random() + Math.random()) / 3;
+          const gy = (Math.random() + Math.random() + Math.random()) / 3;
+          const px = cx + (gx - 0.5) * w * 2;
+          const py = cy + (gy - 0.5) * h * 2;
+          const r = 8 + Math.random() * 35;
+          const a = dark ? 0.015 + Math.random() * 0.035 : 0.005 + Math.random() * 0.015;
+          parts.push({ x: px, y: py, r, color: base + a.toFixed(3) + ')' });
+        }
+        return parts;
+      }
+
+      function rebuild() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const w = window.innerWidth;
+        const h = Math.max(window.innerHeight, document.documentElement.scrollHeight);
+        pageW = w; pageH = h;
+        canvas!.width = Math.floor(w * dpr);
+        canvas!.height = Math.floor(h * dpr);
+        canvas!.style.width = w + 'px';
+        canvas!.style.height = h + 'px';
+        ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const area = w * h;
+        const dark = isDark();
+
+        const total = Math.floor((area / 10000) * 20);
+        statics = [];
+        for (let i = 0; i < total; i++) {
+          const rr = Math.random();
+          statics.push({
+            x: Math.random() * w, y: Math.random() * h,
+            r: rr < 0.80 ? 0.3 + Math.random() * 0.3 :
+               rr < 0.96 ? 0.5 + Math.random() * 0.4 : 0.8 + Math.random() * 0.5,
+            alpha: rr < 0.60 ? 0.12 + Math.random() * 0.18 :
+                   rr < 0.90 ? 0.30 + Math.random() * 0.20 : 0.55 + Math.random() * 0.20,
+            ci: ci(Math.random()),
+          });
+        }
+
+        named = NAMED_STARS.map(s => ({
+          ...s,
+          x: 40 + Math.random() * (w - 80),
+          y: 40 + Math.random() * (h - 80),
+          baseAlpha: 0.85 + Math.random() * 0.15,
+          phase: Math.random() * Math.PI * 2,
+          freq: 3.5 + Math.random() * 4.0,
+        }));
+
+        const nebCount = Math.max(3, Math.floor((area / 10000) * 0.12));
+        nebParts = [];
+        for (let i = 0; i < nebCount; i++) {
+          const nx = Math.random() * w;
+          const ny = Math.random() * h;
+          const nw = 80 + Math.random() * 180;
+          const nh = 60 + Math.random() * 140;
+          nebParts.push(...makeNebula(nx, ny, nw, nh, dark));
+        }
+      }
+
+      // ---- Blackhole detection -------------------------------------------
+      function getBlackhole(): { cx: number; cy: number; radius: number } | null {
+        const el = document.getElementById('blackhole-marker');
+        if (!el) return null;
+        const rect = el.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2 + window.scrollX;
+        const cy = rect.top + rect.height / 2 + window.scrollY;
+        // radius sized to be clearly visible
+        const radius = Math.min(rect.width, rect.height) * 0.28;
+        return { cx, cy, radius };
+      }
+
+      // Gravitational lens: pull stars toward the blackhole center
+      function lens(
+        sx: number, sy: number,
+        bhCx: number, bhCy: number, bhR: number
+      ): [number, number, boolean] {
+        const dx = sx - bhCx;
+        const dy = sy - bhCy;
+        const r = Math.sqrt(dx * dx + dy * dy);
+        if (r < bhR) return [sx, sy, true]; // inside event horizon
+        const K = bhR * bhR * 3.5;
+        const offset = K / r;
+        const falloff = 0.3 + 0.7 * Math.exp(-r / (bhR * 5));
+        const ox = (dx / r) * offset * falloff;
+        const oy = (dy / r) * offset * falloff;
+        return [sx - ox, sy - oy, false];
+      }
+
+      function draw(time: number) {
+        const p = pal();
+        const dark = isDark();
+        const w = pageW, h = pageH;
+        ctx!.clearRect(0, 0, w, h);
+
+        const bh = getBlackhole();
+
+        // 1. Nebula particles (large blobs, no lensing)
+        for (const np of nebParts) {
+          ctx!.globalAlpha = 1;
+          ctx!.fillStyle = np.color;
+          ctx!.beginPath();
+          ctx!.arc(np.x, np.y, np.r, 0, Math.PI * 2);
+          ctx!.fill();
+        }
+
+        // 2. Dim static stars — all gravitationally lensed near the blackhole
+        for (const s of statics) {
+          let sx = s.x, sy = s.y;
+          if (bh) {
+            let swallowed: boolean;
+            [sx, sy, swallowed] = lens(s.x, s.y, bh.cx, bh.cy, bh.radius);
+            if (swallowed) continue;
+          }
+          ctx!.globalAlpha = s.alpha;
+          ctx!.fillStyle = p[s.ci];
+          ctx!.beginPath();
+          ctx!.arc(sx, sy, s.r, 0, Math.PI * 2);
+          ctx!.fill();
+        }
+
+        // 3. Named bright stars with twinkle and diffraction spikes
+        for (const s of named) {
+          let sx = s.x, sy = s.y;
+          let swallowed = false;
+          if (bh) [sx, sy, swallowed] = lens(s.x, s.y, bh.cx, bh.cy, bh.radius);
+          if (swallowed) continue;
+
+          const tw = 0.5 + 0.5 * Math.sin(time * s.freq + s.phase);
+          const a = s.baseAlpha * (0.75 + 0.25 * tw);
+          const col = p[s.ci];
+
+          ctx!.globalAlpha = a;
+          ctx!.fillStyle = col;
+          ctx!.beginPath();
+          ctx!.arc(sx, sy, s.r * (0.8 + tw * 0.2), 0, Math.PI * 2);
+          ctx!.fill();
+
+          ctx!.globalAlpha = a * 0.2;
+          ctx!.beginPath();
+          ctx!.arc(sx, sy, s.r * 2.2, 0, Math.PI * 2);
+          ctx!.fill();
+
+          if (s.spike > 0) {
+            ctx!.globalAlpha = a * s.spike * 0.7;
+            ctx!.strokeStyle = col;
+            ctx!.lineWidth = 0.5;
+            const len = s.r * (3 + tw * 2);
+            ctx!.beginPath();
+            ctx!.moveTo(sx - len, sy); ctx!.lineTo(sx + len, sy);
+            ctx!.moveTo(sx, sy - len); ctx!.lineTo(sx, sy + len);
+            ctx!.stroke();
+            if (s.spike > 0.85) {
+              ctx!.globalAlpha = a * s.spike * 0.25;
+              const d = len * 0.45 * Math.SQRT1_2;
+              ctx!.beginPath();
+              ctx!.moveTo(sx - d, sy - d); ctx!.lineTo(sx + d, sy + d);
+              ctx!.moveTo(sx - d, sy + d); ctx!.lineTo(sx + d, sy - d);
+              ctx!.stroke();
+            }
+          }
+        }
+
+        // 4. Blackhole — drawn last so it sits on top of all stars
+        if (bh) {
+          const { cx: bcx, cy: bcy, radius: br } = bh;
+
+          // Event horizon: solid black (or white in light mode) disk
+          ctx!.globalAlpha = 1;
+          ctx!.fillStyle = dark ? '#000000' : '#ffffff';
+          ctx!.beginPath();
+          ctx!.arc(bcx, bcy, br, 0, Math.PI * 2);
+          ctx!.fill();
+
+          // Photon ring
+          ctx!.globalAlpha = dark ? 0.7 : 0.35;
+          ctx!.strokeStyle = dark ? '#ffdd99' : '#333';
+          ctx!.lineWidth = 1.8;
+          ctx!.beginPath();
+          ctx!.arc(bcx, bcy, br * 1.08, 0, Math.PI * 2);
+          ctx!.stroke();
+
+          // Rotating accretion glow (deterministic — no Math.random each frame)
+          for (let i = 0; i < 60; i++) {
+            const angle = (i / 60) * Math.PI * 2;
+            const spiralR = br * (1.15 + 0.6 * Math.sin(angle * 2 - time * 1.4 + i * 0.1));
+            const arcLen = 0.08 + 0.04 * Math.sin(i * 2.7);
+            const brightness = 0.5 + 0.5 * Math.sin(angle * 2 - time * 1.4);
+            if (brightness < 0.25) continue;
+            ctx!.globalAlpha = brightness * (dark ? 0.3 : 0.14);
+            ctx!.strokeStyle = dark ? '#ff8844' : '#555';
+            ctx!.lineWidth = 1 + brightness;
+            ctx!.beginPath();
+            ctx!.arc(bcx, bcy, spiralR, angle, angle + arcLen);
+            ctx!.stroke();
+          }
+
+          // Einstein ring gradient
+          const eRingGrad = ctx!.createRadialGradient(
+            bcx, bcy, br * 1.2, bcx, bcy, br * 1.5
+          );
+          eRingGrad.addColorStop(0, dark ? 'rgba(255,220,150,0.18)' : 'rgba(0,0,0,0.07)');
+          eRingGrad.addColorStop(0.5, dark ? 'rgba(255,200,120,0.08)' : 'rgba(0,0,0,0.03)');
+          eRingGrad.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx!.globalAlpha = 1;
+          ctx!.fillStyle = eRingGrad;
+          ctx!.beginPath();
+          ctx!.arc(bcx, bcy, br * 1.5, 0, Math.PI * 2);
+          ctx!.fill();
+        }
+
+        ctx!.globalAlpha = 1;
+      }
+
+      rebuild();
+
+      let resizeTimer: number | undefined;
+      window.addEventListener('resize', () => {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(rebuild, 150);
+      });
+      new MutationObserver(() => rebuild())
+        .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+      let lastDocH = document.documentElement.scrollHeight;
+      setInterval(() => {
+        const dh = document.documentElement.scrollHeight;
+        if (Math.abs(dh - lastDocH) > 50) { lastDocH = dh; rebuild(); }
+      }, 2000);
+
+      let running = true;
+      const start = performance.now();
+      let lastFrame = 0;
+
+      function tick(now: number) {
+        if (!running) return;
+        if (now - lastFrame >= 1000 / 30) {
+          lastFrame = now;
+          draw((now - start) / 1000);
+        }
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) running = false;
+        else if (!running) { running = true; lastFrame = 0; requestAnimationFrame(tick); }
+      });
+    }
+  }
+</script>
+
+<style>
+  #starfield {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: -1;
+    pointer-events: none;
+  }
+</style>

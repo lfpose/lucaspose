@@ -1,0 +1,61 @@
+---
+import Base from '../layouts/Base.astro';
+const base = import.meta.env.BASE_URL;
+---
+
+<Base title="Lucas Pose" description="Lucas Pose, software engineer in Santiago, Chile.">
+  <h1 class="lang-en">Hi, I'm Lucas.</h1>
+  <h1 class="lang-es">Hola, soy Lucas.</h1>
+
+  <p class="ticker lang-en">
+    <span class="ticker-label">[now]</span>
+    <span
+      class="ticker-text"
+      data-phrases='["building data-intensive UIs","shipping React at Inform","exploring AI agents","in Santiago, Chile","climbing on weekends","learning the Ralph technique","playing AOE2 at night"]'
+    ></span>
+  </p>
+  <p class="ticker lang-es">
+    <span class="ticker-label">[ahora]</span>
+    <span
+      class="ticker-text"
+      data-phrases='["construyendo UIs de datos","con React en Inform","explorando agentes de IA","en Santiago, Chile","escalando los fines de semana","aprendiendo la técnica Ralph","jugando AOE2 de noche"]'
+    ></span>
+  </p>
+
+  <p class="lang-en">
+    I'm a software engineer based in Santiago, Chile. I work at Inform,
+    building the front-end of a data-intensive logistics product in React
+    and TypeScript. I take ownership of the code at the intersection of
+    business logic and the web app, with a constant eye on performance.
+  </p>
+  <p class="lang-es">
+    Soy ingeniero de software en Santiago, Chile. Trabajo en Inform,
+    construyendo el front-end de un producto de logística intensivo en datos
+    con React y TypeScript. Me enfoco en la intersección entre la lógica de
+    negocio y la aplicación web, con especial atención al rendimiento.
+  </p>
+
+  <p class="lang-en">
+    Outside of work I'm currently deep into autonomous software development
+    and AI agentic tooling. I also climb, lift, play chess, and when life
+    allows, play guitar, StarCraft, and AOE2.
+  </p>
+  <p class="lang-es">
+    Fuera del trabajo estoy profundizando en el desarrollo autónomo de software
+    y herramientas de agentes IA. También escalo, hago pesas, juego ajedrez y,
+    cuando la vida lo permite, toco guitarra, StarCraft y AOE2.
+  </p>
+
+  <h2 class="lang-en">Elsewhere</h2>
+  <h2 class="lang-es">En la red</h2>
+  <ul>
+    <li><a href="https://github.com/lucaspose">GitHub</a></li>
+  </ul>
+
+  <p class="lang-en">
+    See <a href={`${base}now`}>what I'm working on now</a>.
+  </p>
+  <p class="lang-es">
+    Ver <a href={`${base}now`}>en qué estoy trabajando ahora</a>.
+  </p>
+</Base>

@@ -1,0 +1,298 @@
+:root {
+  /* Light = pure monochrome: black on white */
+  --fg: #000000;
+  --fg-muted: #555555;
+  --bg: #ffffff;
+  --accent: #000000;
+  --rule: #cccccc;
+  --paper-tint: rgba(0, 0, 0, 0);
+  --max-width: 40rem;
+}
+
+:root[data-theme='dark'] {
+  --fg: #f0ece2;
+  --fg-muted: #8a8780;
+  --bg: #0a0a10;
+  --accent: #ff7566;
+  --rule: #2a2925;
+  --paper-tint: rgba(255, 255, 255, 0);
+}
+
+
+* { box-sizing: border-box; }
+
+html {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+  padding: 2.5rem 1.25rem 4rem;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  background: transparent;
+}
+
+main {
+  width: 100%;
+  max-width: var(--max-width);
+  position: relative;
+  z-index: 1;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px dashed var(--rule);
+}
+
+header nav {
+  display: flex;
+  gap: 1.5rem;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+header nav a {
+  color: var(--fg-muted);
+  text-decoration: none;
+  position: relative;
+  padding: 0 0.15rem;
+}
+
+header nav a:hover {
+  color: var(--fg);
+}
+
+header nav a[aria-current='page'] {
+  color: var(--fg);
+}
+
+header nav a[aria-current='page']::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  bottom: -4px;
+  height: 6px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 6' preserveAspectRatio='none'><path d='M 1 3 Q 10 0 20 3 T 40 3 T 59 3' fill='none' stroke='%23d94c3d' stroke-width='1.6' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+:root[data-theme='dark'] header nav a[aria-current='page']::after {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 6' preserveAspectRatio='none'><path d='M 1 3 Q 10 0 20 3 T 40 3 T 59 3' fill='none' stroke='%23ff7566' stroke-width='1.6' stroke-linecap='round'/></svg>");
+}
+
+#theme-toggle {
+  background: transparent;
+  border: 1.5px solid var(--fg);
+  color: var(--fg);
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-family: inherit;
+  /* intentionally no transition */
+}
+
+#theme-toggle:hover {
+  background: var(--paper-tint);
+}
+
+#theme-toggle svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#theme-toggle .icon-sun { display: none; }
+:root[data-theme='dark'] #theme-toggle .icon-sun { display: inline; }
+:root[data-theme='dark'] #theme-toggle .icon-moon { display: none; }
+
+h1 {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 2rem;
+  line-height: 1.15;
+  margin: 0 0 1rem;
+  letter-spacing: -0.02em;
+  min-height: 1lh; /* prevent layout collapse during scramble */
+}
+
+h2 {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 1.25rem;
+  margin: 2.25rem 0 0.75rem;
+  position: relative;
+  display: inline-block;
+  letter-spacing: -0.01em;
+  min-height: 1lh; /* prevent layout collapse during scramble */
+}
+
+h2::before {
+  content: '~';
+  color: var(--accent);
+  margin-right: 0.4rem;
+  font-weight: 400;
+}
+
+/* Spectrum light sweep — applied to text only via background-clip */
+@keyframes spectrum-drift {
+  from { background-position: 120% 50%; }
+  to   { background-position: -120% 50%; }
+}
+
+:root[data-theme='dark'] h1,
+:root[data-theme='dark'] h2 {
+  background-image: linear-gradient(
+    90deg,
+    var(--fg)          0%,
+    var(--fg)          8%,
+    hsl(270,72%,78%)  20%,
+    hsl(220,78%,80%)  33%,
+    hsl(165,68%,70%)  46%,
+    hsl( 55,85%,76%)  59%,
+    hsl( 22,85%,76%)  72%,
+    hsl(  0,78%,76%)  84%,
+    var(--fg)         93%,
+    var(--fg)        100%
+  );
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: spectrum-drift 14s linear infinite;
+}
+
+/* h2 slightly faster so it feels independent */
+:root[data-theme='dark'] h2 {
+  animation-duration: 10s;
+}
+
+/* Keep the ~ accent colour – it lives on ::before which has its own color */
+:root[data-theme='dark'] h2::before {
+  color: var(--accent);
+}
+
+p { margin: 0 0 1rem; }
+
+a {
+  color: var(--fg);
+  text-decoration: none;
+  background-image: linear-gradient(var(--accent), var(--accent));
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 100% 1.5px;
+  padding-bottom: 1px;
+}
+
+a:hover {
+  background-size: 100% 3px;
+}
+
+strong { font-weight: 700; }
+
+.ticker {
+  font-family: ui-monospace, "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+  margin-bottom: 1.5rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ticker-label {
+  color: var(--accent);
+}
+
+.ticker-text {
+  color: var(--fg);
+}
+
+ul {
+  padding-left: 0;
+  list-style: none;
+}
+
+li {
+  margin-bottom: 0.4rem;
+  padding-left: 1.25rem;
+  position: relative;
+}
+
+li::before {
+  content: '✦';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-size: 0.85em;
+  top: 0.15em;
+}
+
+footer {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--rule);
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+}
+
+
+/* ---- Language toggle ---- */
+#lang-toggle {
+  background: transparent;
+  border: 1.5px solid var(--fg);
+  color: var(--fg);
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+#lang-toggle:hover {
+  background: var(--paper-tint);
+}
+
+/* EN/ES content switching */
+.lang-es { display: none; }
+:root[data-lang='es'] .lang-en { display: none; }
+:root[data-lang='es'] .lang-es { display: revert; }
+/* Flex override for ticker paragraphs */
+:root[data-lang='es'] .ticker.lang-es { display: flex; }
+
+/* Small screens */
+@media (max-width: 520px) {
+  h1 { font-size: 1.9rem; }
+}

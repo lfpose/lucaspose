@@ -1,0 +1,108 @@
+---
+---
+
+<!-- Drifting background orbs (pure CSS, GPU-composited) -->
+<div class="bg-orb bg-orb-1" aria-hidden="true"></div>
+<div class="bg-orb bg-orb-2" aria-hidden="true"></div>
+<div class="bg-orb bg-orb-3" aria-hidden="true"></div>
+
+<!-- Film grain overlay -->
+<canvas id="grain-canvas" aria-hidden="true"></canvas>
+
+<style>
+  /* ── Orbs ─────────────────────────────────────── */
+  .bg-orb {
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(90px);
+    will-change: transform;
+  }
+
+  .bg-orb-1 {
+    width: 70vw; height: 70vw;
+    top: -25vh; left: -20vw;
+    z-index: 0;
+    animation: orb1 32s ease-in-out infinite alternate;
+  }
+  .bg-orb-2 {
+    width: 58vw; height: 58vw;
+    bottom: -20vh; right: -15vw;
+    z-index: 0;
+    animation: orb2 26s ease-in-out infinite alternate;
+  }
+  .bg-orb-3 {
+    width: 48vw; height: 48vw;
+    top: 35vh; left: 35vw;
+    z-index: 0;
+    animation: orb3 38s ease-in-out infinite alternate;
+  }
+
+  /* Dark mode colours */
+  :root[data-theme='dark'] .bg-orb-1 { background: hsl(262,58%,20%); opacity: 0.6; }
+  :root[data-theme='dark'] .bg-orb-2 { background: hsl(200,52%,16%); opacity: 0.55; }
+  :root[data-theme='dark'] .bg-orb-3 { background: hsl(168,46%,14%); opacity: 0.45; }
+
+  /* Light mode colours */
+  :root:not([data-theme='dark']) .bg-orb-1 { background: hsl(262,65%,90%); opacity: 0.55; }
+  :root:not([data-theme='dark']) .bg-orb-2 { background: hsl(200,65%,88%); opacity: 0.5; }
+  :root:not([data-theme='dark']) .bg-orb-3 { background: hsl(168,55%,87%); opacity: 0.4; }
+
+  @keyframes orb1 {
+    from { transform: translate(0, 0); }
+    to   { transform: translate(22vw, 28vh); }
+  }
+  @keyframes orb2 {
+    from { transform: translate(0, 0); }
+    to   { transform: translate(-22vw, -18vh); }
+  }
+  @keyframes orb3 {
+    from { transform: translate(0, 0) scale(1); }
+    to   { transform: translate(-12vw, 16vh) scale(1.12); }
+  }
+
+  /* ── Grain canvas ─────────────────────────────── */
+  #grain-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 150;
+    mix-blend-mode: overlay;
+  }
+  :root[data-theme='dark'] #grain-canvas { opacity: 0.08; }
+  :root:not([data-theme='dark']) #grain-canvas { opacity: 0.05; }
+</style>
+
+<script>
+  const cvs = document.getElementById('grain-canvas') as HTMLCanvasElement;
+  const ctx = cvs.getContext('2d')!;
+
+  // Small off-screen buffer – scaled up when composited for a coarser grain
+  const BUF = 512;
+  const buf = document.createElement('canvas');
+  buf.width = buf.height = BUF;
+  const bCtx = buf.getContext('2d')!;
+  const img = bCtx.createImageData(BUF, BUF);
+
+  function resize() {
+    cvs.width  = window.innerWidth;
+    cvs.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function tick() {
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = (Math.random() * 255) | 0;
+      d[i] = d[i + 1] = d[i + 2] = v;
+      d[i + 3] = 255;
+    }
+    bCtx.putImageData(img, 0, 0);
+    ctx.drawImage(buf, 0, 0, cvs.width, cvs.height);
+    setTimeout(tick, 80); // ~12 fps – enough for a film-grain feel
+  }
+  tick();
+</script>

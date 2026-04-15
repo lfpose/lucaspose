@@ -1,0 +1,321 @@
+---
+// ASCII hero: Earth + Moon. No rings.
+//
+// Earth uses domain-warped 3D Perlin-ish noise (6 octaves) for continent
+// shapes that look organic — coastlines wiggle, landmasses have peninsulas,
+// oceans have realistic basins. Color is assigned by elevation + latitude
+// (ocean, coast, green, forest, desert, ice).
+//
+// A single Moon orbits with grey, crater-textured shading.
+---
+
+<div class="hero-wrap" aria-hidden="true">
+  <pre id="hero-ascii"></pre>
+</div>
+
+<script>
+  const preEl = document.getElementById('hero-ascii');
+  if (preEl) {
+    const pre = preEl;
+
+    const W = 220;
+    const H = 38;
+
+    const RAMP = ' .\'`,:;!i*+=xo#%@';
+    const RAMP_LAST = RAMP.length - 1;
+
+    const R = 17;            // Earth radius in cells
+    const MOON_R = 4.5;      // Moon radius
+    const MOON_ORBIT = R * 3.2;
+    const MOON_SPEED = 0.4;
+
+    const TILT = 0.44;
+    const ASPECT_Y = 2.0;
+
+    // Light direction
+    const Lm = Math.hypot(-0.45, 0.55, 0.7);
+    const lx = -0.45 / Lm;
+    const ly = 0.55 / Lm;
+    const lz = 0.7 / Lm;
+
+    // --- Color palettes (dark = full color, light = monochrome) ---
+    const PAL_DARK = [
+      '',           // 0 default
+      '#1a3a6e',    // 1 ocean deep
+      '#2264a8',    // 2 ocean mid
+      '#3088c0',    // 3 ocean shallow / coast water
+      '#5a9e48',    // 4 lowland green
+      '#3d7a2a',    // 5 forest green
+      '#2a5c1a',    // 6 dark forest
+      '#b8a060',    // 7 savanna / dry grass
+      '#c4a050',    // 8 desert
+      '#9a8458',    // 9 beach / coast sand (darkened to prevent white flicker)
+      '#c8ccd4',    // 10 ice (unused — polar ice removed)
+      '#0d1a38',    // 11 night side
+      '#8a8a8a',    // 12 moon lit
+      '#444444',    // 13 moon dark
+    ];
+    const PAL_LIGHT = [
+      '', '#000', '#000', '#000', '#000', '#000', '#000',
+      '#000', '#000', '#000', '#000', '#000', '#000', '#000',
+    ];
+
+    function getPal(): string[] {
+      return document.documentElement.getAttribute('data-theme') === 'light'
+        ? PAL_LIGHT : PAL_DARK;
+    }
+    let COLOR_STYLES = getPal();
+    new MutationObserver(() => { COLOR_STYLES = getPal(); })
+      .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    // Mouse
+    let mTX = 0, mTY = 0, mSX = 0, mSY = 0;
+    window.addEventListener('mousemove', (e) => {
+      mTX = (e.clientX / window.innerWidth - 0.5) * 2;
+      mTY = (e.clientY / window.innerHeight - 0.5) * 2;
+    }, { passive: true });
+
+    // --- 3D gradient noise (Perlin-ish) ------------------------------------
+    // Uses a hash to generate pseudo-gradient vectors at each lattice point,
+    // then smoothly interpolates with a quintic fade curve.
+
+    function gradDot(ix: number, iy: number, iz: number, dx: number, dy: number, dz: number): number {
+      const h = ((ix * 1597 + iy * 5851 + iz * 7919) & 0xFFFF) % 12;
+      // 12 gradient vectors
+      const gx = [1,1,-1,-1, 1,1,-1,-1, 0,0,0,0][h];
+      const gy = [1,-1,1,-1, 0,0,0,0, 1,1,-1,-1][h];
+      const gz = [0,0,0,0, 1,-1,1,-1, 1,-1,1,-1][h];
+      return gx * dx + gy * dy + gz * dz;
+    }
+
+    function fade(t: number): number {
+      return t * t * t * (t * (t * 6 - 15) + 10);
+    }
+    function lerp(a: number, b: number, t: number): number {
+      return a + (b - a) * t;
+    }
+
+    function perlin3(x: number, y: number, z: number): number {
+      const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+      const xf = x - xi, yf = y - yi, zf = z - zi;
+      const u = fade(xf), v = fade(yf), w = fade(zf);
+
+      const n000 = gradDot(xi, yi, zi, xf, yf, zf);
+      const n100 = gradDot(xi+1, yi, zi, xf-1, yf, zf);
+      const n010 = gradDot(xi, yi+1, zi, xf, yf-1, zf);
+      const n110 = gradDot(xi+1, yi+1, zi, xf-1, yf-1, zf);
+      const n001 = gradDot(xi, yi, zi+1, xf, yf, zf-1);
+      const n101 = gradDot(xi+1, yi, zi+1, xf-1, yf, zf-1);
+      const n011 = gradDot(xi, yi+1, zi+1, xf, yf-1, zf-1);
+      const n111 = gradDot(xi+1, yi+1, zi+1, xf-1, yf-1, zf-1);
+
+      return lerp(
+        lerp(lerp(n000, n100, u), lerp(n010, n110, u), v),
+        lerp(lerp(n001, n101, u), lerp(n011, n111, u), v),
+        w
+      );
+    }
+
+    // FBM with domain warping for organic coastlines
+    function terrain(x: number, y: number, z: number): number {
+      // First pass: domain warp (offset the sample with another noise field)
+      const warpStrength = 0.35;
+      const wx = perlin3(x * 1.7 + 5.3, y * 1.7 + 9.1, z * 1.7 + 2.8) * warpStrength;
+      const wy = perlin3(x * 1.7 + 13.2, y * 1.7 + 1.7, z * 1.7 + 7.4) * warpStrength;
+      const wz = perlin3(x * 1.7 + 8.5, y * 1.7 + 4.6, z * 1.7 + 11.9) * warpStrength;
+
+      // FBM on the warped coordinates
+      let v = 0, a = 0.5, f = 2.0;
+      const px = x + wx, py = y + wy, pz = z + wz;
+      for (let i = 0; i < 6; i++) {
+        v += a * perlin3(px * f, py * f, pz * f);
+        f *= 2.05;
+        a *= 0.48;
+      }
+      // Normalize roughly to 0..1
+      return v * 0.5 + 0.5;
+    }
+
+    // Assign Earth biome color from height + latitude + brightness
+    function earthColor(nx: number, ny: number, nz: number, b: number): number {
+      const absLat = Math.abs(ny);
+
+      // Night side
+      if (b < 0.12) return 11;
+
+      // No polar ice — keep it clean
+
+      const h = terrain(nx, ny, nz);
+      const SEA_LEVEL = 0.48;
+
+      if (h < SEA_LEVEL) {
+        // Ocean depth
+        const depth = SEA_LEVEL - h;
+        if (depth > 0.15) return 1;  // deep
+        if (depth > 0.06) return 2;  // mid
+        return 3;                     // shallow / coastal
+      }
+
+      const alt = (h - SEA_LEVEL) / (1 - SEA_LEVEL); // 0..1 above sea level
+
+      // Beach strip right at coast
+      if (alt < 0.06) return 9;
+
+      // Dry latitude belts (~20-35°)
+      if (absLat > 0.25 && absLat < 0.45 && alt < 0.35) {
+        return alt < 0.18 ? 7 : 8; // savanna or desert
+      }
+
+      // Equatorial belt
+      if (absLat < 0.3) {
+        return alt > 0.4 ? 6 : 5; // dark forest or forest
+      }
+
+      // Temperate
+      if (alt > 0.55) return 6; // dense forest / highlands
+      return alt > 0.2 ? 5 : 4; // forest or lowland
+    }
+
+    function shadeChar(brightness: number): string {
+      const b = Math.max(0, Math.min(1, brightness));
+      return RAMP[Math.round(b * RAMP_LAST)];
+    }
+
+    // --- Render buffers ---
+    const chars = new Array<string>(W * H);
+    const cols = new Uint8Array(W * H);
+
+    function render(time: number) {
+      mSX += (mTX - mSX) * 0.14;
+      mSY += (mTY - mSY) * 0.14;
+
+      const spinY = time * 0.12 + mSX * 2.3;
+      const cosS = Math.cos(spinY);
+      const sinS = Math.sin(spinY);
+      const tilt = TILT + mSY * 0.55;
+      const cT = Math.cos(tilt);
+      const sT = Math.sin(tilt);
+
+      // Moon world position (in y=0 plane, then y-spinned)
+      const moonAngle = time * MOON_SPEED;
+      const mwx0 = Math.cos(moonAngle) * MOON_ORBIT;
+      const mwz0 = Math.sin(moonAngle) * MOON_ORBIT;
+      const mwx = mwx0 * cosS + mwz0 * sinS;
+      const mwz = -mwx0 * sinS + mwz0 * cosS;
+      // View-space moon center (tilt rotation applied)
+      const moonVX = mwx;
+      const moonVY = mwz * sT;
+      const moonVZ = mwz * cT;
+
+      for (let j = 0; j < H; j++) {
+        for (let i = 0; i < W; i++) {
+          const sx = i - W / 2;
+          const sy = -(j - H / 2) * ASPECT_Y;
+          const idx = j * W + i;
+
+          let bestZ = Infinity;
+          let bestCh: string | null = null;
+          let bestCol = 0;
+
+          // --- Earth ---
+          const rs2 = sx * sx + sy * sy;
+          if (rs2 < R * R) {
+            const vz = -Math.sqrt(R * R - rs2);
+            const nxv = sx / R, nyv = sy / R, nzv = vz / R;
+            // Undo tilt
+            const nyW = nyv * cT - nzv * sT;
+            const nzW_t = nyv * sT + nzv * cT;
+            // Undo spin
+            const nxW = nxv * cosS - nzW_t * sinS;
+            const nzW = nxv * sinS + nzW_t * cosS;
+
+            const diffuse = Math.max(0, nxW * lx + nyW * ly + nzW * lz);
+            const b = 0.05 + 0.9 * diffuse;
+            bestZ = vz;
+            bestCh = shadeChar(b);
+            bestCol = earthColor(nxW, nyW, nzW, b);
+          }
+
+          // --- Moon ---
+          const mdx = sx - moonVX;
+          const mdy = sy - moonVY;
+          const md2 = mdx * mdx + mdy * mdy;
+          if (md2 < MOON_R * MOON_R) {
+            const mvz = moonVZ - Math.sqrt(MOON_R * MOON_R - md2);
+            if (mvz < bestZ) {
+              const mnxv = mdx / MOON_R;
+              const mnyv = mdy / MOON_R;
+              const mnzv = -Math.sqrt(Math.max(0, 1 - mnxv * mnxv - mnyv * mnyv));
+              const mnyW = mnyv * cT - mnzv * sT;
+              const mnzW = mnyv * sT + mnzv * cT;
+              const diffuse = Math.max(0, mnxv * lx + mnyW * ly + mnzW * lz);
+              // Crater texture via low-freq noise on the moon surface
+              const crater = perlin3(mnxv * 4, mnyv * 4, mnzv * 4);
+              const tex = 0.75 + crater * 0.25;
+              const b = (0.05 + 0.9 * diffuse) * tex;
+              bestZ = mvz;
+              bestCh = shadeChar(b);
+              bestCol = b > 0.35 ? 12 : 13;
+            }
+          }
+
+          if (bestCh !== null) {
+            chars[idx] = bestCh;
+            cols[idx] = bestCol;
+          } else {
+            chars[idx] = ' ';
+            cols[idx] = 0;
+          }
+        }
+      }
+
+      // Run-length-encoded colored HTML
+      let html = '';
+      let runCol = cols[0];
+      let run = '';
+      for (let j = 0; j < H; j++) {
+        for (let i = 0; i < W; i++) {
+          const k = j * W + i;
+          if (cols[k] !== runCol) {
+            if (runCol === 0) html += run;
+            else html += `<span style="color:${COLOR_STYLES[runCol]}">${run}</span>`;
+            run = '';
+            runCol = cols[k];
+          }
+          run += chars[k];
+        }
+        if (j < H - 1) run += '\n';
+      }
+      if (run.length) {
+        if (runCol === 0) html += run;
+        else html += `<span style="color:${COLOR_STYLES[runCol]}">${run}</span>`;
+      }
+      pre.innerHTML = html;
+    }
+
+    let running = true;
+    const start = performance.now();
+    let lastRender = 0;
+    const TARGET_MS = 1000 / 30;
+
+    function tick(now: number) {
+      if (!running) return;
+      if (now - lastRender >= TARGET_MS) {
+        lastRender = now;
+        render((now - start) / 1000);
+      }
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        running = false;
+      } else if (!running) {
+        running = true;
+        lastRender = 0;
+        requestAnimationFrame(tick);
+      }
+    });
+  }
+</script>

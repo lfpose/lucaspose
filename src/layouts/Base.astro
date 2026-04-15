@@ -1,0 +1,328 @@
+---
+import '../styles/global.css';
+import LightCanvas from '../components/LightCanvas.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = 'Lucas Pose, personal site' } = Astro.props;
+
+const base = import.meta.env.BASE_URL;
+const path = Astro.url.pathname;
+const isHome = path === base || path === base.replace(/\/$/, '');
+const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/\/$/, '')}/now`);
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
+    <link rel="icon" href={`${base}favicon.ico`} />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet" />
+    <script is:inline>
+      (function () {
+        try {
+          var stored = localStorage.getItem('theme');
+          var theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+        try {
+          var storedLang = localStorage.getItem('lang');
+          var lang = storedLang || (navigator.language && navigator.language.toLowerCase().startsWith('es') ? 'es' : 'en');
+          document.documentElement.setAttribute('data-lang', lang);
+        } catch (e) {
+          document.documentElement.setAttribute('data-lang', 'en');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <LightCanvas />
+
+    <main>
+      <header>
+        <nav>
+          <a href={base} aria-current={isHome ? 'page' : undefined}>
+            <span class="lang-en">About</span><span class="lang-es">Sobre&nbsp;mí</span>
+          </a>
+          <a href={`${base}now`} aria-current={isNow ? 'page' : undefined}>
+            <span class="lang-en">Now</span><span class="lang-es">Ahora</span>
+          </a>
+        </nav>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          <button id="lang-toggle" aria-label="Toggle language" type="button">
+            <span class="lang-en">ES</span>
+            <span class="lang-es">EN</span>
+          </button>
+          <button id="theme-toggle" aria-label="Toggle color theme" type="button">
+            <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M 20 14 A 8 8 0 1 1 10 4 a 6.5 6.5 0 0 0 10 10 z" />
+            </svg>
+            <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M 12 2 v 3 M 12 19 v 3 M 2 12 h 3 M 19 12 h 3 M 4.5 4.5 l 2.1 2.1 M 17.4 17.4 l 2.1 2.1 M 4.5 19.5 l 2.1 -2.1 M 17.4 6.6 l 2.1 -2.1" />
+            </svg>
+          </button>
+        </div>
+      </header>
+      <slot />
+      <footer>
+        © {new Date().getFullYear()} Lucas Pose · Santiago, Chile
+      </footer>
+    </main>
+
+    <!-- Theme toggle -->
+    <script>
+      const btn = document.getElementById('theme-toggle');
+      btn?.addEventListener('click', () => {
+        const cur = document.documentElement.getAttribute('data-theme') || 'light';
+        const next = cur === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        try { localStorage.setItem('theme', next); } catch {}
+      });
+    </script>
+
+    <!-- Lang toggle -->
+    <script>
+      const langBtn = document.getElementById('lang-toggle');
+      langBtn?.addEventListener('click', () => {
+        const cur = document.documentElement.getAttribute('data-lang') || 'en';
+        const next = cur === 'es' ? 'en' : 'es';
+        document.documentElement.setAttribute('data-lang', next);
+        try { localStorage.setItem('lang', next); } catch {}
+      });
+    </script>
+
+    <!-- Glitch scramble for headings & links (limited ASCII charset) -->
+    <script>
+      const GLITCH = '!?#_-+=/\\|<>[]{}~^';
+
+      function pickGlyph(): string {
+        return GLITCH[Math.floor(Math.random() * GLITCH.length)];
+      }
+
+      // Replace every non-space char with a random glyph (preserves layout height)
+      function makeNoise(text: string): string {
+        return [...text].map(ch => (ch === ' ' || ch === '\n') ? ch : pickGlyph()).join('');
+      }
+
+      // Scramble el's textContent toward `target`, revealing left-to-right
+      function scramble(el: HTMLElement, target: string, duration = 900, onDone?: () => void) {
+        const start = performance.now();
+        function step(now: number) {
+          const t = Math.min(1, (now - start) / duration);
+          if (t >= 1) { el.textContent = target; onDone?.(); return; }
+          const revealed = Math.floor(target.length * (1 - Math.pow(1 - t, 2.2)));
+          let out = '';
+          for (let i = 0; i < target.length; i++) {
+            if (i < revealed) out += target[i];
+            else if (target[i] === ' ' || target[i] === '\n') out += target[i];
+            else out += pickGlyph();
+          }
+          el.textContent = out;
+          requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+      }
+
+      // Scramble-reveal headings and footer on load
+      // Start from noise (not empty) so height is preserved and there's no layout shift
+      const revealEls = document.querySelectorAll<HTMLElement>('h1, h2, footer');
+      revealEls.forEach((el, i) => {
+        const original = el.textContent ?? '';
+        el.textContent = makeNoise(original);
+        setTimeout(() => scramble(el, original, 800 + i * 140), 60 + i * 85);
+      });
+
+      function attachHoverScramble(el: HTMLElement, duration: number) {
+        let busy = false;
+        el.addEventListener('mouseenter', () => {
+          if (busy) return;
+          busy = true;
+          const txt = el.textContent ?? '';
+          scramble(el, txt, duration, () => { busy = false; });
+        });
+      }
+
+      // Hover scramble — headings
+      document.querySelectorAll<HTMLElement>('h1, h2').forEach((el) => {
+        attachHoverScramble(el, 500);
+      });
+
+      // Hover scramble — links (skip nav links that contain span children)
+      document.querySelectorAll<HTMLAnchorElement>('a').forEach((a) => {
+        if (a.children.length > 0) return;
+        attachHoverScramble(a, 360);
+      });
+
+      // Hover scramble — paragraphs, list items, footer (skip elements with child elements)
+      document.querySelectorAll<HTMLElement>('p, li, footer').forEach((el) => {
+        if (el.children.length > 0) return;
+        attachHoverScramble(el, 650);
+      });
+    </script>
+
+    <!-- Ticker: canvas-rendered via pretext for per-character spectrum animation -->
+    <script>
+      import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext';
+
+      const GLITCH = '!?#_-+=/\\|<>[]{}~^';
+      function pickGlyph() { return GLITCH[Math.floor(Math.random() * GLITCH.length)]; }
+
+      function cssVar(name: string): string {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      }
+
+      function isDark(): boolean {
+        return document.documentElement.getAttribute('data-theme') === 'dark';
+      }
+
+      // Shared animation clock – drives the spectrum sweep across the ticker
+      let animNow = 0;
+      ;(function clock(t: number) { animNow = t; requestAnimationFrame(clock); })(0);
+
+      // Map a normalised x position (0–1) + current time to a spectrum hue
+      function spectrumColor(xNorm: number): string {
+        const CYCLE = 14000; // ms – keep in sync with CSS animation on h1/h2
+        const offset = (animNow / CYCLE) % 1;
+        const t = ((xNorm * 0.65) + offset) % 1;
+        const hue = 270 - t * 270; // violet → blue → green → yellow → orange → red
+        return `hsl(${hue}, 74%, 76%)`;
+      }
+
+      await document.fonts.ready;
+
+      document.querySelectorAll<HTMLElement>('.ticker-text').forEach((tickerEl) => {
+        let phrases: string[];
+        try { phrases = JSON.parse(tickerEl.dataset.phrases || '[]'); } catch { phrases = []; }
+        if (phrases.length === 0) return;
+
+        const cs = getComputedStyle(tickerEl);
+        const fontSize = parseFloat(cs.fontSize);
+        const font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+        const lineH = fontSize * 1.6;
+
+        // Measure the widest phrase
+        const probe = document.createElement('canvas');
+        const pCtx = probe.getContext('2d')!;
+        pCtx.font = font;
+        let maxW = 0;
+        for (const phrase of phrases) {
+          const prep = prepareWithSegments(phrase, font);
+          const { lines } = layoutWithLines(prep, 9999, lineH);
+          if (lines[0]) maxW = Math.max(maxW, lines[0].width);
+        }
+        maxW += pCtx.measureText('▌').width + 6;
+
+        const dpr = devicePixelRatio;
+        const cvs = document.createElement('canvas');
+        cvs.width  = Math.ceil(maxW * dpr);
+        cvs.height = Math.ceil(lineH * dpr);
+        cvs.style.width  = Math.ceil(maxW) + 'px';
+        cvs.style.height = Math.ceil(lineH) + 'px';
+        cvs.style.verticalAlign = 'middle';
+        cvs.style.display = 'inline-block';
+
+        tickerEl.replaceWith(cvs);
+
+        const ctx = cvs.getContext('2d')!;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        type CharInfo = { ch: string; x: number; w: number };
+
+        function measurePhrase(text: string): CharInfo[] {
+          ctx.font = font;
+          const prep = prepareWithSegments(text, font);
+          const { lines } = layoutWithLines(prep, maxW, lineH);
+          const chars: CharInfo[] = [];
+          if (!lines[0]) return chars;
+          let x = 0;
+          for (const ch of [...lines[0].text]) {
+            const cw = ctx.measureText(ch).width;
+            chars.push({ ch, x, w: cw });
+            x += cw;
+          }
+          return chars;
+        }
+
+        let charPositions = measurePhrase(phrases[0]);
+        let glitchMap = new Map<number, string>();
+        let cursorOn = true;
+        let rafId = 0;
+
+        setInterval(() => { cursorOn = !cursorOn; }, 550);
+
+        function render() {
+          ctx.clearRect(0, 0, maxW, lineH);
+          ctx.font = font;
+          ctx.textBaseline = 'middle';
+          const midY = lineH / 2;
+          const fg     = cssVar('--fg')     || '#000';
+          const accent = cssVar('--accent') || '#000';
+          const dark = isDark();
+
+          let endX = 0;
+          for (let i = 0; i < charPositions.length; i++) {
+            const { ch, x, w } = charPositions[i];
+            const display = glitchMap.has(i) ? glitchMap.get(i)! : ch;
+            // In dark mode each character gets a position-based spectrum hue
+            ctx.fillStyle = dark ? spectrumColor(x / maxW) : fg;
+            ctx.fillText(display, x, midY);
+            endX = x + w;
+          }
+
+          if (cursorOn) {
+            ctx.fillStyle = dark ? spectrumColor(endX / maxW) : accent;
+            ctx.fillText('▌', endX + 2, midY);
+          }
+        }
+
+        // Run render every frame so the spectrum sweep stays live
+        function loop() { render(); rafId = requestAnimationFrame(loop); }
+        loop();
+
+        let idx = 1;
+
+        function nextPhrase() {
+          const next = phrases[idx % phrases.length];
+          idx++;
+          const nextChars = measurePhrase(next);
+          const duration = 650;
+          const startT = performance.now();
+
+          function frame(now: number) {
+            const t = Math.min(1, (now - startT) / duration);
+            const revealed = Math.floor(nextChars.length * Math.pow(t, 0.9));
+
+            const newGlitch = new Map<number, string>();
+            for (let i = revealed; i < nextChars.length; i++) {
+              if (nextChars[i].ch !== ' ') newGlitch.set(i, pickGlyph());
+            }
+            charPositions = nextChars;
+            glitchMap = newGlitch;
+
+            if (t < 1) requestAnimationFrame(frame);
+            else {
+              glitchMap = new Map();
+              setTimeout(nextPhrase, 2400);
+            }
+          }
+
+          requestAnimationFrame(frame);
+        }
+
+        setTimeout(nextPhrase, 1500);
+      });
+    </script>
+  </body>
+</html>

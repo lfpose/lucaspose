@@ -1,0 +1,23 @@
+---
+// Blackhole marker. The actual distortion is applied by the Starfield
+// component, which detects this element's page position and warps stars
+// around it. This div is just a positional anchor.
+---
+
+<div id="blackhole-marker" class="blackhole-marker" aria-hidden="true"></div>
+
+<style>
+  .blackhole-marker {
+    width: 100vw;
+    height: 32vh;
+    min-height: 260px;
+    max-height: 420px;
+    position: relative;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw;
+    margin-right: -50vw;
+    margin-top: 3rem;
+    pointer-events: none;
+  }
+</style>
