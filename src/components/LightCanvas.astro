@@ -1,64 +1,34 @@
 ---
 ---
 
-<!-- Drifting background orbs (pure CSS, GPU-composited) -->
-<div class="bg-orb bg-orb-1" aria-hidden="true"></div>
-<div class="bg-orb bg-orb-2" aria-hidden="true"></div>
-<div class="bg-orb bg-orb-3" aria-hidden="true"></div>
+<!-- ASCII fluid background -->
+<canvas id="ascii-bg" aria-hidden="true"></canvas>
+
+<!-- HDMI glitch overlay -->
+<canvas id="glitch-canvas" aria-hidden="true"></canvas>
 
 <!-- Film grain overlay -->
 <canvas id="grain-canvas" aria-hidden="true"></canvas>
 
 <style>
-  /* ── Orbs ─────────────────────────────────────── */
-  .bg-orb {
+  /* ── ASCII fluid background ─────────────────────── */
+  #ascii-bg {
     position: fixed;
-    border-radius: 50%;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
     pointer-events: none;
-    filter: blur(90px);
-    will-change: transform;
-  }
-
-  .bg-orb-1 {
-    width: 70vw; height: 70vw;
-    top: -25vh; left: -20vw;
     z-index: 0;
-    animation: orb1 32s ease-in-out infinite alternate;
-  }
-  .bg-orb-2 {
-    width: 58vw; height: 58vw;
-    bottom: -20vh; right: -15vw;
-    z-index: 0;
-    animation: orb2 26s ease-in-out infinite alternate;
-  }
-  .bg-orb-3 {
-    width: 48vw; height: 48vw;
-    top: 35vh; left: 35vw;
-    z-index: 0;
-    animation: orb3 38s ease-in-out infinite alternate;
   }
 
-  /* Dark mode colours */
-  :root[data-theme='dark'] .bg-orb-1 { background: hsl(262,58%,20%); opacity: 0.6; }
-  :root[data-theme='dark'] .bg-orb-2 { background: hsl(200,52%,16%); opacity: 0.55; }
-  :root[data-theme='dark'] .bg-orb-3 { background: hsl(168,46%,14%); opacity: 0.45; }
-
-  /* Light mode colours */
-  :root:not([data-theme='dark']) .bg-orb-1 { background: hsl(262,65%,90%); opacity: 0.55; }
-  :root:not([data-theme='dark']) .bg-orb-2 { background: hsl(200,65%,88%); opacity: 0.5; }
-  :root:not([data-theme='dark']) .bg-orb-3 { background: hsl(168,55%,87%); opacity: 0.4; }
-
-  @keyframes orb1 {
-    from { transform: translate(0, 0); }
-    to   { transform: translate(22vw, 28vh); }
-  }
-  @keyframes orb2 {
-    from { transform: translate(0, 0); }
-    to   { transform: translate(-22vw, -18vh); }
-  }
-  @keyframes orb3 {
-    from { transform: translate(0, 0) scale(1); }
-    to   { transform: translate(-12vw, 16vh) scale(1.12); }
+  /* ── HDMI glitch canvas ───────────────────────── */
+  #glitch-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 1;
   }
 
   /* ── Grain canvas ─────────────────────────────── */
@@ -76,24 +46,245 @@
 </style>
 
 <script>
-  const cvs = document.getElementById('grain-canvas') as HTMLCanvasElement;
-  const ctx = cvs.getContext('2d')!;
+  // ── ASCII fluid background ───────────────────────
+  const asciiCvs = document.getElementById('ascii-bg') as HTMLCanvasElement;
+  const asciiCtx = asciiCvs.getContext('2d')!;
 
-  // Small off-screen buffer – scaled up when composited for a coarser grain
+  // Minimal braille subset for subtle effect
+  const BRAILLE = ' ·⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟';
+  
+  const GRID_COLS = 80;
+  const GRID_ROWS = 45;
+  const CELL_SIZE = 16;
+  
+  let time = 0;
+  
+  function isDark(): boolean {
+    return document.documentElement.getAttribute('data-theme') === 'dark';
+  }
+  
+  // Mouse interaction state
+  let mouseX = -1000;
+  let mouseY = -1000;
+  let mouseInfluence = 0;
+  
+  document.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+    mouseInfluence = 1.0;
+  });
+  
+  // Reset mouse influence when mouse leaves window
+  document.addEventListener('mouseleave', () => {
+    mouseInfluence = 0;
+    mouseX = -1000;
+    mouseY = -1000;
+  });
+  
+  // Decay mouse influence over time
+  function updateMouseInfluence() {
+    mouseInfluence *= 0.98;
+    if (mouseInfluence < 0.01) mouseInfluence = 0;
+  }
+  
+  // Improved noise with fluid-like layers
+  function noise(x: number, y: number, t: number): number {
+    // Layer 1: Base flow
+    const n1 = Math.sin(x * 0.08 + t * 0.3) * Math.cos(y * 0.06 + t * 0.2);
+    
+    // Layer 2: Secondary movement
+    const n2 = Math.sin(x * 0.12 - t * 0.2 + y * 0.1) * 0.5;
+    
+    // Layer 3: Fine details
+    const n3 = Math.cos(x * 0.15 + y * 0.08 - t * 0.4) * 0.3;
+    
+    // Layer 4: Mouse influence
+    let n4 = 0;
+    if (mouseInfluence > 0.01) {
+      const dx = (x * 20 - mouseX) / 100;
+      const dy = (y * 20 - mouseY) / 100;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const influence = Math.max(0, 1 - dist) * mouseInfluence;
+      n4 = Math.sin(dx * 2 + t) * Math.cos(dy * 2 + t) * influence;
+    }
+    
+    return n1 + n2 + n3 + n4;
+  }
+  
+  function renderAscii() {
+    const width = asciiCvs.width;
+    const height = asciiCvs.height;
+    const dark = isDark();
+    
+    asciiCtx.fillStyle = dark ? '#2F2D2A' : '#EAE7E1';
+    asciiCtx.fillRect(0, 0, width, height);
+    
+    // Calculate grid positioning
+    const cellWidth = width / GRID_COLS;
+    const cellHeight = height / GRID_ROWS;
+    
+    asciiCtx.font = `${Math.min(cellWidth, cellHeight) * 0.7}px Arial`;
+    asciiCtx.textBaseline = 'middle';
+    asciiCtx.textAlign = 'center';
+    
+    for (let row = 0; row < GRID_ROWS; row++) {
+      for (let col = 0; col < GRID_COLS; col++) {
+        const x = col;
+        const y = row;
+        
+        // Generate noise value
+        const n = noise(x, y, time);
+        const brightness = (n + 1) / 2; // Normalize to 0-1
+        
+        // Map brightness to braille character
+        const charIndex = Math.min(BRAILLE.length - 1, Math.floor(brightness * BRAILLE.length));
+        const char = BRAILLE[charIndex];
+        
+        // Very subtle opacity - go back to grayscale
+        const opacity = brightness * 0.15; // Max 15% opacity for subtlety
+        
+        // Grayscale color based on theme
+        const grayValue = dark ? 180 : 120;
+        asciiCtx.fillStyle = `rgba(${grayValue}, ${grayValue}, ${grayValue}, ${opacity})`;
+        
+        // Draw character
+        const posX = col * cellWidth + cellWidth / 2;
+        const posY = row * cellHeight + cellHeight / 2;
+        asciiCtx.fillText(char, posX, posY);
+      }
+    }
+  }
+  
+  function resizeAscii() {
+    asciiCvs.width = window.innerWidth;
+    asciiCvs.height = window.innerHeight;
+    renderAscii();
+  }
+  
+  resizeAscii();
+  window.addEventListener('resize', resizeAscii);
+  
+  // Redraw on theme change
+  new MutationObserver(() => { renderAscii(); })
+    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  
+  // Animation loop
+  function animate() {
+    time += 0.015; // Slightly slower for more fluid movement
+    updateMouseInfluence();
+    renderAscii();
+    requestAnimationFrame(animate);
+  }
+  
+  animate();
+
+  // ── HDMI glitch effect ──────────────────────────
+  const glitchCvs = document.getElementById('glitch-canvas') as HTMLCanvasElement;
+  const glitchCtx = glitchCvs.getContext('2d')!;
+  
+  const NEON_BLUE = '#00FFFF';
+  const GLITCH_DURATION = 100; // ms
+  const BASE_GLITCH_CHANCE = 0.01; // starting probability per frame
+  const MAX_GLITCH_CHANCE = 0.3; // maximum probability (too much)
+  const FREQUENCY_GROWTH_TIME = 60000; // 60 seconds to reach max frequency
+  
+  interface Glitch {
+    x: number;
+    y: number;
+    end: number;
+  }
+  
+  const activeGlitches: Glitch[] = [];
+  const startTime = performance.now();
+  
+  function getGlitchColor(): string {
+    // Neon cyan for dark mode, dark cyan for light mode
+    return isDark() ? '#00CCCC' : '#008B8B';
+  }
+  
+  function getCurrentGlitchChance(): number {
+    const elapsed = performance.now() - startTime;
+    const progress = Math.min(1, elapsed / FREQUENCY_GROWTH_TIME);
+    return BASE_GLITCH_CHANCE + (MAX_GLITCH_CHANCE - BASE_GLITCH_CHANCE) * progress;
+  }
+  
+  function spawnGlitch(): void {
+    const x = Math.random() * window.innerWidth;
+    const y = Math.random() * window.innerHeight;
+    const end = performance.now() + GLITCH_DURATION;
+    activeGlitches.push({ x, y, end });
+  }
+  
+  function renderGlitches(): void {
+    const now = performance.now();
+    
+    // Remove expired glitches
+    for (let i = activeGlitches.length - 1; i >= 0; i--) {
+      if (now >= activeGlitches[i].end) {
+        activeGlitches.splice(i, 1);
+      }
+    }
+    
+    // Clear canvas
+    glitchCtx.clearRect(0, 0, glitchCvs.width, glitchCvs.height);
+    
+    // Draw active glitches
+    glitchCtx.fillStyle = getGlitchColor();
+    for (const glitch of activeGlitches) {
+      // Randomize position slightly for jitter effect
+      const jitterX = (Math.random() - 0.5) * 2;
+      const jitterY = (Math.random() - 0.5) * 2;
+      
+      glitchCtx.fillRect(
+        glitch.x + jitterX,
+        glitch.y + jitterY,
+        2, // 2x2 pixel size
+        2
+      );
+    }
+  }
+  
+  function resizeGlitch() {
+    glitchCvs.width = window.innerWidth;
+    glitchCvs.height = window.innerHeight;
+  }
+  resizeGlitch();
+  window.addEventListener('resize', resizeGlitch);
+  
+  // Update glitches on theme change
+  new MutationObserver(() => { renderGlitches(); })
+    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  
+  function tickGlitch(): void {
+    // Randomly spawn new glitches with increasing frequency
+    const currentChance = getCurrentGlitchChance();
+    if (Math.random() < currentChance) {
+      spawnGlitch();
+    }
+    
+    renderGlitches();
+    requestAnimationFrame(tickGlitch);
+  }
+  tickGlitch();
+
+  // ── Film grain overlay ─────────────────────────
+  const grainCvs = document.getElementById('grain-canvas') as HTMLCanvasElement;
+  const grainCtx = grainCvs.getContext('2d')!;
+
   const BUF = 512;
   const buf = document.createElement('canvas');
   buf.width = buf.height = BUF;
   const bCtx = buf.getContext('2d')!;
   const img = bCtx.createImageData(BUF, BUF);
 
-  function resize() {
-    cvs.width  = window.innerWidth;
-    cvs.height = window.innerHeight;
+  function resizeGrain() {
+    grainCvs.width = window.innerWidth;
+    grainCvs.height = window.innerHeight;
   }
-  resize();
-  window.addEventListener('resize', resize);
+  resizeGrain();
+  window.addEventListener('resize', resizeGrain);
 
-  function tick() {
+  function tickGrain() {
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) {
       const v = (Math.random() * 255) | 0;
@@ -101,8 +292,8 @@
       d[i + 3] = 255;
     }
     bCtx.putImageData(img, 0, 0);
-    ctx.drawImage(buf, 0, 0, cvs.width, cvs.height);
-    setTimeout(tick, 80); // ~12 fps – enough for a film-grain feel
+    grainCtx.drawImage(buf, 0, 0, grainCvs.width, grainCvs.height);
+    setTimeout(tickGrain, 80);
   }
-  tick();
+  tickGrain();
 </script>

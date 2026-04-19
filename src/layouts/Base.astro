@@ -26,7 +26,7 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
     <title>{title}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <script is:inline>
       (function () {
         try {
@@ -81,6 +81,17 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
       </footer>
     </main>
 
+    <!-- Glitch height preservation - prevents layout shift during animations -->
+    <style>
+      main h1, main h2, main li, main footer {
+        min-height: 1.2em;
+        font-family: 'IBM Plex Mono', 'Courier New', monospace;
+      }
+      main li, main footer {
+        min-height: 1.6em;
+      }
+    </style>
+
     <!-- Theme toggle -->
     <script>
       const btn = document.getElementById('theme-toggle');
@@ -105,7 +116,16 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
 
     <!-- Glitch scramble for headings & links (limited ASCII charset) -->
     <script>
-      const GLITCH = '!?#_-+=/\\|<>[]{}~^';
+      // Small dot-like symbols and punctuation to prevent layout shift and improve aesthetics
+      const GLITCH = ".,'`·•∙-+<>[]~^*&";
+      
+      // Track mouse position for mouse-aware glitch effect
+      let mouseX = 0;
+      let mouseY = 0;
+      window.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+      });
 
       function pickGlyph(): string {
         return GLITCH[Math.floor(Math.random() * GLITCH.length)];
@@ -116,18 +136,67 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
         return [...text].map(ch => (ch === ' ' || ch === '\n') ? ch : pickGlyph()).join('');
       }
 
-      // Scramble el's textContent toward `target`, revealing left-to-right
+      // Scramble el's textContent toward `target`, with mouse-aware wave effect
       function scramble(el: HTMLElement, target: string, duration = 900, onDone?: () => void) {
         const start = performance.now();
+        let completed = false;
+        
+        function finish() {
+          if (completed) return;
+          completed = true;
+          el.textContent = target;
+          onDone?.();
+        }
+        
+        // Safety fallback: force completion after duration + buffer
+        const safetyTimeout = setTimeout(() => {
+          finish();
+        }, duration + 100);
+        
+        // Get element position to calculate distance from mouse
+        const rect = el.getBoundingClientRect();
+        const elCenterX = rect.left + rect.width / 2;
+        const elCenterY = rect.top + rect.height / 2;
+        
+        // Calculate distance from mouse to element center
+        const dx = mouseX - elCenterX;
+        const dy = mouseY - elCenterY;
+        const mouseDist = Math.sqrt(dx * dx + dy * dy);
+        
+        // Mouse angle relative to element center
+        const mouseAngle = Math.atan2(dy, dx);
+        
         function step(now: number) {
           const t = Math.min(1, (now - start) / duration);
-          if (t >= 1) { el.textContent = target; onDone?.(); return; }
-          const revealed = Math.floor(target.length * (1 - Math.pow(1 - t, 2.2)));
+          if (t >= 1) {
+            clearTimeout(safetyTimeout);
+            finish();
+            return;
+          }
+          
+          // Wave spreads outward from mouse position
+          const waveRadius = Math.max(rect.width, rect.height) * 1.5 * t;
+          
           let out = '';
           for (let i = 0; i < target.length; i++) {
-            if (i < revealed) out += target[i];
-            else if (target[i] === ' ' || target[i] === '\n') out += target[i];
-            else out += pickGlyph();
+            // Calculate approximate character position in element
+            const charProgress = i / target.length;
+            const charX = rect.left + rect.width * charProgress;
+            const charY = rect.top + rect.height / 2;
+            
+            // Calculate distance from mouse to this character
+            const cdx = charX - mouseX;
+            const cdy = charY - mouseY;
+            const charDist = Math.sqrt(cdx * cdx + cdy * cdy);
+            
+            // Character is revealed if it's within the wave radius
+            if (charDist <= waveRadius) {
+              out += target[i];
+            } else if (target[i] === ' ' || target[i] === '\n') {
+              out += target[i];
+            } else {
+              out += pickGlyph();
+            }
           }
           el.textContent = out;
           requestAnimationFrame(step);
@@ -141,16 +210,52 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
       revealEls.forEach((el, i) => {
         const original = el.textContent ?? '';
         el.textContent = makeNoise(original);
-        setTimeout(() => scramble(el, original, 800 + i * 140), 60 + i * 85);
+        
+        // Add safety timeout to ensure text is correct even if animation fails
+        setTimeout(() => {
+          scramble(el, original, 800 + i * 140, () => {
+            // Verify final state
+            if (el.textContent !== original) {
+              el.textContent = original;
+            }
+          });
+          
+          // Ultimate safety: force correct text after animation duration + buffer
+          setTimeout(() => {
+            if (el.textContent !== original) {
+              el.textContent = original;
+            }
+          }, 800 + i * 140 + 200);
+        }, 60 + i * 85);
       });
 
       function attachHoverScramble(el: HTMLElement, duration: number) {
         let busy = false;
+        let currentTarget = '';
+        
         el.addEventListener('mouseenter', () => {
           if (busy) return;
+          
+          // Store the original target text
+          const originalText = el.textContent ?? '';
+          currentTarget = originalText;
           busy = true;
-          const txt = el.textContent ?? '';
-          scramble(el, txt, duration, () => { busy = false; });
+          
+          scramble(el, originalText, duration, () => {
+            // Verify we're still showing the expected text
+            if (el.textContent !== originalText) {
+              el.textContent = originalText;
+            }
+            busy = false;
+            currentTarget = '';
+          });
+        });
+        
+        // Safety: if mouse leaves during animation, ensure text is correct
+        el.addEventListener('mouseleave', () => {
+          if (busy && currentTarget) {
+            el.textContent = currentTarget;
+          }
         });
       }
 
@@ -165,8 +270,8 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
         attachHoverScramble(a, 360);
       });
 
-      // Hover scramble — paragraphs, list items, footer (skip elements with child elements)
-      document.querySelectorAll<HTMLElement>('p, li, footer').forEach((el) => {
+      // Hover scramble — footer and list items (skip elements with child elements)
+      document.querySelectorAll<HTMLElement>('li, footer').forEach((el) => {
         if (el.children.length > 0) return;
         attachHoverScramble(el, 650);
       });
@@ -176,7 +281,8 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
     <script>
       import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext';
 
-      const GLITCH = '!?#_-+=/\\|<>[]{}~^';
+      // Small dot-like symbols and punctuation to prevent layout shift and improve aesthetics
+      const GLITCH = ".,'`·•∙-+<>[]~^*&";
       function pickGlyph() { return GLITCH[Math.floor(Math.random() * GLITCH.length)]; }
 
       function cssVar(name: string): string {
@@ -191,13 +297,13 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
       let animNow = 0;
       ;(function clock(t: number) { animNow = t; requestAnimationFrame(clock); })(0);
 
-      // Map a normalised x position (0–1) + current time to a spectrum hue
+      // Map a normalised x position (0–1) + current time to a grayscale value
       function spectrumColor(xNorm: number): string {
         const CYCLE = 14000; // ms – keep in sync with CSS animation on h1/h2
         const offset = (animNow / CYCLE) % 1;
         const t = ((xNorm * 0.65) + offset) % 1;
-        const hue = 270 - t * 270; // violet → blue → green → yellow → orange → red
-        return `hsl(${hue}, 74%, 76%)`;
+        const lightness = 50 + t * 30; // 50-80% lightness - grayscale
+        return `hsl(0, 0%, ${lightness}%)`;
       }
 
       await document.fonts.ready;
@@ -324,5 +430,43 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
         setTimeout(nextPhrase, 1500);
       });
     </script>
+
+    <style>
+      /* Amber to blue spectrum gradient on content links (not nav) */
+      main a, body > a {
+        background: linear-gradient(
+          90deg,
+          hsl(45, 85%, 55%) 0%,    /* Amber */
+          hsl(50, 60%, 75%) 25%,   /* Light amber */
+          hsl(200, 30%, 85%) 50%,  /* Very light blue */
+          hsl(210, 60%, 70%) 75%,  /* Light blue */
+          hsl(220, 80%, 55%) 100%   /* Blue */
+        );
+        background-size: 200% 100%;
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent !important;
+        animation: spectrum-shift 8s ease-in-out infinite;
+      }
+      
+      /* Don't apply to navigation links */
+      nav a {
+        background: none;
+        color: inherit !important;
+        animation: none;
+      }
+      
+      @keyframes spectrum-shift {
+        0%, 100% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+      }
+      
+      /* Preserve glitch effect on hover */
+      main a:hover, body > a:hover {
+        color: inherit !important;
+        background: none;
+        animation: none;
+      }
+    </style>
   </body>
 </html>
