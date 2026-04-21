@@ -1,8 +1,8 @@
 ---
 ---
 
-<!-- ASCII fluid background -->
-<canvas id="ascii-bg" aria-hidden="true"></canvas>
+<!-- Golden fluid background -->
+<iframe id="fluid-bg" src="/golden-fluid.html" aria-hidden="true" tabindex="-1"></iframe>
 
 <!-- HDMI glitch overlay -->
 <canvas id="glitch-canvas" aria-hidden="true"></canvas>
@@ -11,17 +11,23 @@
 <canvas id="grain-canvas" aria-hidden="true"></canvas>
 
 <style>
-  /* ── ASCII fluid background ─────────────────────── */
-  #ascii-bg {
+  #fluid-bg {
     position: fixed;
     inset: 0;
     width: 100vw;
     height: 100vh;
+    border: none;
     pointer-events: none;
     z-index: 0;
+    opacity: 0.4;
   }
 
-  /* ── HDMI glitch canvas ───────────────────────── */
+  /* Light mode: invert to warm light palette */
+  :root:not([data-theme='dark']) #fluid-bg {
+    filter: invert(1) sepia(0.15) brightness(1.05);
+    opacity: 0.35;
+  }
+
   #glitch-canvas {
     position: fixed;
     inset: 0;
@@ -31,7 +37,6 @@
     z-index: 1;
   }
 
-  /* ── Grain canvas ─────────────────────────────── */
   #grain-canvas {
     position: fixed;
     inset: 0;
@@ -46,222 +51,56 @@
 </style>
 
 <script>
-  // ── ASCII fluid background ───────────────────────
-  const asciiCvs = document.getElementById('ascii-bg') as HTMLCanvasElement;
-  const asciiCtx = asciiCvs.getContext('2d')!;
-
-  // Minimal braille subset for subtle effect
-  const BRAILLE = ' ·⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟';
-  
-  const GRID_COLS = 80;
-  const GRID_ROWS = 45;
-  const CELL_SIZE = 16;
-  
-  let time = 0;
-  
   function isDark(): boolean {
     return document.documentElement.getAttribute('data-theme') === 'dark';
   }
-  
-  // Mouse interaction state
-  let mouseX = -1000;
-  let mouseY = -1000;
-  let mouseInfluence = 0;
-  
-  document.addEventListener('mousemove', (e) => {
-    mouseX = e.clientX;
-    mouseY = e.clientY;
-    mouseInfluence = 1.0;
-  });
-  
-  // Reset mouse influence when mouse leaves window
-  document.addEventListener('mouseleave', () => {
-    mouseInfluence = 0;
-    mouseX = -1000;
-    mouseY = -1000;
-  });
-  
-  // Decay mouse influence over time
-  function updateMouseInfluence() {
-    mouseInfluence *= 0.98;
-    if (mouseInfluence < 0.01) mouseInfluence = 0;
-  }
-  
-  // Improved noise with fluid-like layers
-  function noise(x: number, y: number, t: number): number {
-    // Layer 1: Base flow
-    const n1 = Math.sin(x * 0.08 + t * 0.3) * Math.cos(y * 0.06 + t * 0.2);
-    
-    // Layer 2: Secondary movement
-    const n2 = Math.sin(x * 0.12 - t * 0.2 + y * 0.1) * 0.5;
-    
-    // Layer 3: Fine details
-    const n3 = Math.cos(x * 0.15 + y * 0.08 - t * 0.4) * 0.3;
-    
-    // Layer 4: Mouse influence
-    let n4 = 0;
-    if (mouseInfluence > 0.01) {
-      const dx = (x * 20 - mouseX) / 100;
-      const dy = (y * 20 - mouseY) / 100;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const influence = Math.max(0, 1 - dist) * mouseInfluence;
-      n4 = Math.sin(dx * 2 + t) * Math.cos(dy * 2 + t) * influence;
-    }
-    
-    return n1 + n2 + n3 + n4;
-  }
-  
-  function renderAscii() {
-    const width = asciiCvs.width;
-    const height = asciiCvs.height;
-    const dark = isDark();
-    
-    asciiCtx.fillStyle = dark ? '#2F2D2A' : '#EAE7E1';
-    asciiCtx.fillRect(0, 0, width, height);
-    
-    // Calculate grid positioning
-    const cellWidth = width / GRID_COLS;
-    const cellHeight = height / GRID_ROWS;
-    
-    asciiCtx.font = `${Math.min(cellWidth, cellHeight) * 0.7}px Arial`;
-    asciiCtx.textBaseline = 'middle';
-    asciiCtx.textAlign = 'center';
-    
-    for (let row = 0; row < GRID_ROWS; row++) {
-      for (let col = 0; col < GRID_COLS; col++) {
-        const x = col;
-        const y = row;
-        
-        // Generate noise value
-        const n = noise(x, y, time);
-        const brightness = (n + 1) / 2; // Normalize to 0-1
-        
-        // Map brightness to braille character
-        const charIndex = Math.min(BRAILLE.length - 1, Math.floor(brightness * BRAILLE.length));
-        const char = BRAILLE[charIndex];
-        
-        // Very subtle opacity - go back to grayscale
-        const opacity = brightness * 0.15; // Max 15% opacity for subtlety
-        
-        // Grayscale color based on theme
-        const grayValue = dark ? 180 : 120;
-        asciiCtx.fillStyle = `rgba(${grayValue}, ${grayValue}, ${grayValue}, ${opacity})`;
-        
-        // Draw character
-        const posX = col * cellWidth + cellWidth / 2;
-        const posY = row * cellHeight + cellHeight / 2;
-        asciiCtx.fillText(char, posX, posY);
-      }
-    }
-  }
-  
-  function resizeAscii() {
-    asciiCvs.width = window.innerWidth;
-    asciiCvs.height = window.innerHeight;
-    renderAscii();
-  }
-  
-  resizeAscii();
-  window.addEventListener('resize', resizeAscii);
-  
-  // Redraw on theme change
-  new MutationObserver(() => { renderAscii(); })
-    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-  
-  // Animation loop
-  function animate() {
-    time += 0.015; // Slightly slower for more fluid movement
-    updateMouseInfluence();
-    renderAscii();
-    requestAnimationFrame(animate);
-  }
-  
-  animate();
 
   // ── HDMI glitch effect ──────────────────────────
   const glitchCvs = document.getElementById('glitch-canvas') as HTMLCanvasElement;
   const glitchCtx = glitchCvs.getContext('2d')!;
-  
-  const NEON_BLUE = '#00FFFF';
-  const GLITCH_DURATION = 100; // ms
-  const BASE_GLITCH_CHANCE = 0.01; // starting probability per frame
-  const MAX_GLITCH_CHANCE = 0.3; // maximum probability (too much)
-  const FREQUENCY_GROWTH_TIME = 60000; // 60 seconds to reach max frequency
-  
-  interface Glitch {
-    x: number;
-    y: number;
-    end: number;
-  }
-  
+
+  const GLITCH_DURATION = 100;
+  const BASE_GLITCH_CHANCE = 0.01;
+  const MAX_GLITCH_CHANCE = 0.3;
+  const FREQUENCY_GROWTH_TIME = 60000;
+
+  interface Glitch { x: number; y: number; end: number; }
   const activeGlitches: Glitch[] = [];
   const startTime = performance.now();
-  
+
   function getGlitchColor(): string {
-    // Neon cyan for dark mode, dark cyan for light mode
     return isDark() ? '#00CCCC' : '#008B8B';
   }
-  
+
   function getCurrentGlitchChance(): number {
     const elapsed = performance.now() - startTime;
     const progress = Math.min(1, elapsed / FREQUENCY_GROWTH_TIME);
     return BASE_GLITCH_CHANCE + (MAX_GLITCH_CHANCE - BASE_GLITCH_CHANCE) * progress;
   }
-  
+
   function spawnGlitch(): void {
-    const x = Math.random() * window.innerWidth;
-    const y = Math.random() * window.innerHeight;
-    const end = performance.now() + GLITCH_DURATION;
-    activeGlitches.push({ x, y, end });
+    activeGlitches.push({ x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight, end: performance.now() + GLITCH_DURATION });
   }
-  
+
   function renderGlitches(): void {
     const now = performance.now();
-    
-    // Remove expired glitches
     for (let i = activeGlitches.length - 1; i >= 0; i--) {
-      if (now >= activeGlitches[i].end) {
-        activeGlitches.splice(i, 1);
-      }
+      if (now >= activeGlitches[i].end) activeGlitches.splice(i, 1);
     }
-    
-    // Clear canvas
     glitchCtx.clearRect(0, 0, glitchCvs.width, glitchCvs.height);
-    
-    // Draw active glitches
     glitchCtx.fillStyle = getGlitchColor();
-    for (const glitch of activeGlitches) {
-      // Randomize position slightly for jitter effect
-      const jitterX = (Math.random() - 0.5) * 2;
-      const jitterY = (Math.random() - 0.5) * 2;
-      
-      glitchCtx.fillRect(
-        glitch.x + jitterX,
-        glitch.y + jitterY,
-        2, // 2x2 pixel size
-        2
-      );
+    for (const g of activeGlitches) {
+      glitchCtx.fillRect(g.x + (Math.random() - 0.5) * 2, g.y + (Math.random() - 0.5) * 2, 2, 2);
     }
   }
-  
-  function resizeGlitch() {
-    glitchCvs.width = window.innerWidth;
-    glitchCvs.height = window.innerHeight;
-  }
+
+  function resizeGlitch() { glitchCvs.width = window.innerWidth; glitchCvs.height = window.innerHeight; }
   resizeGlitch();
   window.addEventListener('resize', resizeGlitch);
-  
-  // Update glitches on theme change
-  new MutationObserver(() => { renderGlitches(); })
-    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-  
+  new MutationObserver(() => renderGlitches()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
   function tickGlitch(): void {
-    // Randomly spawn new glitches with increasing frequency
-    const currentChance = getCurrentGlitchChance();
-    if (Math.random() < currentChance) {
-      spawnGlitch();
-    }
-    
+    if (Math.random() < getCurrentGlitchChance()) spawnGlitch();
     renderGlitches();
     requestAnimationFrame(tickGlitch);
   }
@@ -277,10 +116,7 @@
   const bCtx = buf.getContext('2d')!;
   const img = bCtx.createImageData(BUF, BUF);
 
-  function resizeGrain() {
-    grainCvs.width = window.innerWidth;
-    grainCvs.height = window.innerHeight;
-  }
+  function resizeGrain() { grainCvs.width = window.innerWidth; grainCvs.height = window.innerHeight; }
   resizeGrain();
   window.addEventListener('resize', resizeGrain);
 

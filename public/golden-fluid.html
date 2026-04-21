@@ -1,0 +1,1261 @@
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Golden Fluid</title>
+<style>
+#sb-toggle,#sidebar{display:none!important}
+
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#030100;overflow:hidden}
+canvas#c{display:block;width:100%;height:100%;cursor:none}
+
+#boot{position:fixed;inset:0;background:#030100;display:flex;align-items:center;
+  justify-content:center;z-index:9;transition:opacity 1.8s ease}
+#boot.gone{opacity:0;pointer-events:none}
+#boot p{color:#6b4a0a;font:400 .72rem/1 Georgia,serif;
+  letter-spacing:.32em;text-transform:uppercase;animation:pulse 2.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.25}50%{opacity:.9}}
+
+#err{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  background:rgba(3,1,0,.97);border:1px solid #4a2e06;color:#9a6e18;
+  font:.76rem/1.8 monospace;padding:1.6rem 2.2rem;max-width:360px;text-align:center;z-index:30;border-radius:3px}
+
+/* ── Glass overlay ────────────────────────────────────────────────────────── */
+#glass{position:fixed;inset:0;pointer-events:none;z-index:1;
+  backdrop-filter:blur(0px);-webkit-backdrop-filter:blur(0px)}
+
+/* ── ASCII background (solid — sits behind text canvas) ─────────────────── */
+#ascii-bg{position:fixed;inset:0;background:#030100;z-index:2;display:none}
+
+/* ── ASCII text canvas — full screen, no filter ──────────────────────────── */
+#ascii-layer{position:fixed;inset:0;width:100%;height:100%;z-index:3;display:block;cursor:none}
+
+/* ── ASCII blur overlay — backdrop-filter on top of text, no edge bleed ──── */
+#ascii-blur{position:fixed;inset:0;z-index:4;pointer-events:none;display:none;
+  backdrop-filter:blur(0px);-webkit-backdrop-filter:blur(0px)}
+
+/* ── Sidebar toggle button ────────────────────────────────────────────────── */
+#sb-toggle{
+  position:fixed;right:0;top:50%;transform:translateY(-50%);
+  width:22px;height:64px;z-index:20;cursor:pointer;
+  background:rgba(10,5,0,0.75);border:1px solid rgba(120,70,10,0.45);
+  border-right:none;border-radius:5px 0 0 5px;
+  display:flex;align-items:center;justify-content:center;
+  color:#a07030;font:11px/1 monospace;writing-mode:vertical-rl;
+  letter-spacing:.12em;text-transform:uppercase;
+  transition:background .2s,color .2s;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  user-select:none
+}
+#sb-toggle:hover{background:rgba(20,10,0,0.92);color:#f0b030}
+
+/* ── Sidebar panel ────────────────────────────────────────────────────────── */
+#sidebar{
+  position:fixed;right:-310px;top:0;bottom:0;width:300px;z-index:19;
+  background:rgba(8,4,0,0.94);border-left:1px solid rgba(120,70,10,0.45);
+  overflow-y:auto;overflow-x:hidden;
+  transition:right .3s cubic-bezier(.4,0,.2,1);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  scrollbar-width:thin;scrollbar-color:rgba(120,70,10,0.35) transparent;
+  padding-bottom:20px
+}
+#sidebar.open{right:0}
+#sidebar::-webkit-scrollbar{width:4px}
+#sidebar::-webkit-scrollbar-thumb{background:rgba(120,70,10,0.35);border-radius:2px}
+
+/* ── Sidebar sections ────────────────────────────────────────────────────── */
+.sb-sec{
+  padding:11px 16px 5px;
+  color:rgba(200,130,20,0.70);font:7.5px/1 monospace;
+  letter-spacing:.28em;text-transform:uppercase;
+  border-top:1px solid rgba(120,70,10,0.20);margin-top:4px
+}
+.sb-sec:first-child{border-top:none;margin-top:0}
+
+/* ── Mode tabs inside sidebar ──────────────────────────────────────────────── */
+#sb-modes{display:flex;gap:5px;padding:8px 14px 4px}
+#sb-modes button{
+  flex:1;background:rgba(8,4,0,0.6);border:1px solid rgba(110,65,8,0.40);
+  color:#7a5010;font:8px/1 monospace;letter-spacing:.14em;text-transform:uppercase;
+  padding:7px 4px;border-radius:3px;cursor:pointer;transition:all .18s
+}
+#sb-modes button:hover{border-color:rgba(200,130,15,0.7);color:#d49020}
+#sb-modes button.active{background:rgba(28,12,0,0.9);border-color:rgba(210,145,15,0.80);color:#f0b030}
+
+/* ── Palette grid inside sidebar ──────────────────────────────────────────── */
+.pal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:6px 14px 2px}
+.pal-swatch{
+  padding:7px 4px 6px;border-radius:4px;cursor:pointer;text-align:center;
+  font:7.5px/1.4 monospace;letter-spacing:.06em;text-transform:uppercase;
+  border:1px solid rgba(255,255,255,0.07);transition:all .13s
+}
+.pal-swatch:hover{transform:scale(1.05);border-color:rgba(255,255,255,0.28)!important}
+.pal-swatch.active{border-color:rgba(255,255,255,0.60)!important;box-shadow:0 0 7px rgba(255,255,255,0.12)}
+
+/* ── Controls inside sidebar ──────────────────────────────────────────────── */
+.sb-row{
+  display:flex;align-items:center;gap:8px;
+  padding:4px 14px;
+}
+.sb-row span{
+  color:#b08020;font:9px/1 monospace;letter-spacing:.07em;
+  text-transform:uppercase;width:54px;flex-shrink:0;user-select:none
+}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;flex:1;height:3px;
+  background:rgba(140,78,12,0.45);border-radius:2px;outline:none;cursor:pointer
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:12px;height:12px;
+  background:#d09015;border-radius:50%;transition:background .15s
+}
+input[type=range]:hover::-webkit-slider-thumb{background:#f0b838}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;background:#d09015;border:none;border-radius:50%}
+select{
+  background:rgba(8,4,0,0.90);border:1px solid rgba(130,72,10,0.50);
+  color:#c88820;font:9px/1 monospace;padding:5px 7px;border-radius:3px;
+  outline:none;cursor:pointer;flex:1;-webkit-appearance:none;appearance:none
+}
+select option{background:#080400;color:#c88820}
+
+/* ── Symbol input inside sidebar ────────────────────────────────────────────── */
+#sym-input{
+  background:rgba(8,4,0,0.88);border:1px solid rgba(110,65,8,0.45);
+  color:#c88820;font:10px/1 'Courier New',Courier,monospace;
+  padding:6px 10px;border-radius:3px;outline:none;
+  width:calc(100% - 28px);margin:4px 14px;
+  caret-color:#d49020;letter-spacing:.04em
+}
+#sym-input::placeholder{color:rgba(110,65,8,0.35);font-size:8px}
+#sym-input:focus{border-color:rgba(180,110,15,0.70)}
+
+/* ── Copy + close row ─────────────────────────────────────────────────────── */
+.sb-footer{display:flex;flex-direction:column;gap:7px;padding:10px 14px 4px}
+.sb-footer-row{display:flex;gap:7px}
+.sb-footer button{
+  flex:1;background:none;border:1px solid rgba(120,70,10,0.42);border-radius:3px;
+  color:#906a14;font:8px/1 monospace;letter-spacing:.16em;text-transform:uppercase;
+  padding:7px;cursor:pointer;transition:all .18s
+}
+.sb-footer button:hover{border-color:rgba(210,145,15,0.8);color:#f0b030}
+.sb-footer button.copied{color:#a8d018;border-color:rgba(140,190,12,0.6)}
+#json-out{
+  width:100%;height:72px;resize:none;
+  background:rgba(4,2,0,0.85);border:1px solid rgba(100,58,8,0.40);
+  color:#9a6e14;font:8.5px/1.5 'Courier New',Courier,monospace;
+  padding:6px 8px;border-radius:3px;outline:none;
+  letter-spacing:.03em;cursor:text;display:none
+}
+
+/* ── Topographic contour layer ──────────────────────────────────────────── */
+#contour-layer{position:fixed;inset:0;z-index:2;width:100%;height:100%;display:block;pointer-events:none}
+
+</style>
+</head>
+<body>
+<div id="boot" class="gone"><p>Conjuring Gold …</p></div>
+<canvas id="c" width="2880" height="1508"></canvas>
+<div id="glass" style="backdrop-filter: blur(0px); display: none;"></div>
+<div id="ascii-bg" style="display: block;"></div>
+<canvas id="ascii-layer" width="2880" height="1508"></canvas>
+<div id="ascii-blur" style="backdrop-filter: blur(0px); display: block;"></div>
+<canvas id="contour-layer" width="2880" height="1508" hidden=""></canvas>
+<div id="err"></div>
+
+<!-- Sidebar toggle -->
+<button id="sb-toggle">☰</button>
+
+<!-- Sidebar -->
+<div id="sidebar" class="">
+
+  <div class="sb-sec">visualizer</div>
+  <div id="sb-modes">
+    <button data-mode="fluid" class="">fluid</button>
+    <button data-mode="ascii" class="active">text</button>
+    <button data-mode="topo" class="">topo</button>
+  </div>
+
+  <div class="sb-sec">palette</div>
+  <div class="pal-grid" id="pal-grid"><div class="pal-swatch" data-id="gold" style="background: rgb(26, 10, 0); color: rgb(212, 144, 10); border-color: rgba(212, 144, 10, 0.267);">Gold</div><div class="pal-swatch" data-id="copper" style="background: rgb(20, 8, 0); color: rgb(192, 96, 48); border-color: rgba(192, 96, 48, 0.267);">Copper</div><div class="pal-swatch active" data-id="silver" style="background: rgb(6, 6, 8); color: rgb(160, 176, 192); border-color: rgba(160, 176, 192, 0.267);">Silver</div><div class="pal-swatch" data-id="ember" style="background: rgb(21, 0, 0); color: rgb(224, 64, 16); border-color: rgba(224, 64, 16, 0.267);">Ember</div><div class="pal-swatch" data-id="ocean" style="background: rgb(0, 10, 20); color: rgb(24, 128, 192); border-color: rgba(24, 128, 192, 0.267);">Ocean</div><div class="pal-swatch" data-id="arctic" style="background: rgb(2, 8, 16); color: rgb(80, 200, 240); border-color: rgba(80, 200, 240, 0.267);">Arctic</div><div class="pal-swatch" data-id="jade" style="background: rgb(0, 20, 8); color: rgb(32, 192, 128); border-color: rgba(32, 192, 128, 0.267);">Jade</div><div class="pal-swatch" data-id="violet" style="background: rgb(8, 0, 16); color: rgb(144, 64, 224); border-color: rgba(144, 64, 224, 0.267);">Violet</div><div class="pal-swatch" data-id="rose" style="background: rgb(20, 0, 8); color: rgb(224, 80, 160); border-color: rgba(224, 80, 160, 0.267);">Rose</div><div class="pal-swatch" data-id="rainbow" style="background: linear-gradient(135deg, rgb(51, 0, 0), rgb(0, 51, 51), rgb(0, 0, 51), rgb(51, 0, 51), rgb(51, 51, 0)); color: rgb(255, 255, 255); border-color: rgba(255, 255, 255, 0.267);">Rainbow</div><div class="pal-swatch" data-id="sepia" style="background: rgb(12, 8, 0); color: rgb(176, 128, 80); border-color: rgba(176, 128, 80, 0.267);">Sepia</div><div class="pal-swatch" data-id="neon" style="background: rgb(0, 0, 0); color: rgb(0, 255, 204); border-color: rgba(0, 255, 204, 0.267);">Neon</div></div>
+
+  <div class="sb-sec">simulation</div>
+  <div class="sb-row"><span>method</span><select id="iMethod">
+    <option value="fluid">Fluid (N-S)</option>
+    <option value="rdiff">React-Diffuse</option>
+    <option value="wave">Wave</option>
+  </select></div>
+  <div class="sb-row"><span>speed</span>   <input type="range" id="iSpeed" min="0.1" max="3.0" step="0.05" value="0.7"></div>
+  <div class="sb-row"><span>noise ↗</span> <input type="range" id="iNScl" min="1" max="12" step="0.2" value="5.8"></div>
+  <div class="sb-row"><span>noise ~</span> <input type="range" id="iNStr" min="0" max="40" step="0.5" value="9.5"></div>
+  <div class="sb-row"><span>src str</span> <input type="range" id="iSStr" min="0" max="3" step="0.05" value="1"></div>
+  <div class="sb-row"><span>src spd</span> <input type="range" id="iSSpd" min="0" max="2" step="0.05" value="1"></div>
+  <div class="sb-row"><span>damping</span> <input type="range" id="iDamp" min="0.980" max="1.000" step="0.001" value="0.989"></div>
+
+  <div class="sb-sec">visual</div>
+  <div class="sb-row"><span>blur</span>    <input type="range" id="iBlur" min="0" max="1" step="0.01" value="1"></div>
+  <div class="sb-row"><span>col brt</span> <input type="range" id="iBrt" min="0" max="2.5" step="0.02" value="1.12"></div>
+  <div class="sb-row"><span>sym brt</span> <input type="range" id="iSym" min="0.1" max="4" step="0.05" value="1"></div>
+  <div class="sb-row"><span>decay</span>   <input type="range" id="iDecay" min="0.990" max="1.000" step="0.0005" value="0.9993"></div>
+  <div class="sb-row"><span>edge ✦</span>  <input type="range" id="iEdge" min="0" max="6" step="0.1" value="5.1"></div>
+  <div class="sb-row"><span>contrast</span><input type="range" id="iContrast" min="0.2" max="4" step="0.05" value="1"></div>
+  <div class="sb-row"><span>midtone</span> <input type="range" id="iMid" min="0.3" max="3" step="0.05" value="1"></div>
+  <div class="sb-row"><span>txt size</span><input type="range" id="iTxtSz" min="0.3" max="4" step="0.1" value="1"></div>
+
+  <div class="sb-sec">symbols (text mode)</div>
+  <div class="sb-row"><span>set</span><select id="sym-select2">
+    <option value="default">Default ASCII</option>
+    <option value="braille">Braille (full)</option>
+    <option value="blocks">Block shading</option>
+    <option value="katakana">Katakana</option>
+    <option value="binary">Binary / hacker</option>
+    <option value="math">Math / Greek</option>
+    <option value="cards">Cards &amp; suits</option>
+    <option value="runic">Runic</option>
+    <option value="boxdraw">Box drawing</option>
+    <option value="geo">Geometric</option>
+    <option value="hiragana">Hiragana</option>
+    <option value="stars">Stars</option>
+    <option value="arabic">Arabic</option>
+    <option value="tibetan">Tibetan</option>
+    <option value="circuit">Circuit</option>
+    <option value="dominos">Dominos</option>
+    <option value="custom">✎ custom…</option>
+  </select></div>
+  <input id="sym-input" type="text" spellcheck="false" maxlength="400" placeholder="type your own symbols…" hidden="">
+
+  <div class="sb-footer">
+    <div class="sb-footer-row">
+      <button id="iCopy">⎘ settings json</button>
+      <button id="iExport">↓ export html</button>
+    </div>
+    <textarea id="json-out" readonly="" spellcheck="false" onclick="this.select()"></textarea>
+  </div>
+
+</div>
+
+<script type="module">
+'use strict';
+
+const SIM  = 256;
+const WG   = 8;
+const DISP = SIM / WG;
+const PRES = 20;
+
+const canvas     = document.getElementById('c');
+const boot       = document.getElementById('boot');
+const errEl      = document.getElementById('err');
+const glassEl    = document.getElementById('glass');
+const asciiLayer = document.getElementById('ascii-layer');
+const asciiBg    = document.getElementById('ascii-bg');
+const asciiBlurEl= document.getElementById('ascii-blur');
+const contourCvs = document.getElementById('contour-layer');
+
+function die(m){ errEl.textContent=m; errEl.style.display='block'; boot.style.display='none'; }
+
+if(!navigator.gpu){ die('WebGPU not supported. Use Chrome 113+, Edge 113+, or Safari 18+.'); throw 0; }
+const adapter = await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
+if(!adapter){ die('No WebGPU adapter found on this device.'); throw 0; }
+const device  = await adapter.requestDevice();
+device.addEventListener('uncapturederror',e=>console.error('[GPU]',e.error.message));
+
+const ctx       = canvas.getContext('webgpu');
+const canvasFmt = navigator.gpu.getPreferredCanvasFormat();
+ctx.configure({device, format:canvasFmt, alphaMode:'opaque'});
+
+const DPR = Math.min(devicePixelRatio, 2);
+function resize(){
+  canvas.width  = Math.floor(canvas.clientWidth  * DPR)|0;
+  canvas.height = Math.floor(canvas.clientHeight * DPR)|0;
+  contourCvs.width  = canvas.width;
+  contourCvs.height = canvas.height;
+}
+new ResizeObserver(resize).observe(canvas);
+resize();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONTROLS
+   Uniform layout (32 × f32 = 128 bytes):
+   [0]dt [1]t [2]sw [3]sh [4]cw [5]ch [6]mx [7]my
+   [8]mvx [9]mvy [10]mdn [11]blur [12]brt [13]nscl [14]nstr [15]sstr
+   [16]sspd [17]damp [18]dcy [19]vig [20]edge [21]temp [22]hue [23]sat
+   [24]contrast [25]mid [26-31]pad
+══════════════════════════════════════════════════════════════════════════════ */
+const C = {"speed":0.75,"nscl":3.8,"nstr":15.5,"sstr":1,"sspd":1,"damp":0.994,"blur":0,"brt":0.15,"sym":1.1,"dcy":0.9985,"vig":1,"edge":2,"temp":-0.1,"hue":0,"sat":0.1,"contrast":0.85,"mid":0.4,"txtsz":1.4};
+const CTRL_MAP = {
+  iSpeed:'speed', iNScl:'nscl',     iNStr:'nstr',     iSStr:'sstr',
+  iSSpd:'sspd',   iDamp:'damp',
+  iBlur:'blur',   iBrt:'brt',       iSym:'sym',       iDecay:'dcy',
+  iEdge:'edge',   iContrast:'contrast', iMid:'mid',
+  iTxtSz:'txtsz',
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PALETTE SYSTEM
+   Each preset defines: hue (radians×π), sat, temp, label, bg, fg
+══════════════════════════════════════════════════════════════════════════════ */
+const PALETTES = [
+  {id:'gold',    label:'Gold',      bg:'#1a0a00',fg:'#d4900a', hue:0,    sat:1,   temp:-0.32},
+  {id:'copper',  label:'Copper',    bg:'#140800',fg:'#c06030', hue:0.08, sat:1.2, temp:0.3},
+  {id:'silver',  label:'Silver',    bg:'#060608',fg:'#a0b0c0', hue:0,    sat:0.1, temp:-0.1},
+  {id:'ember',   label:'Ember',     bg:'#150000',fg:'#e04010', hue:-0.1, sat:1.5, temp:0.8},
+  {id:'ocean',   label:'Ocean',     bg:'#000a14',fg:'#1880c0', hue:-0.55,sat:1.4, temp:-0.9},
+  {id:'arctic',  label:'Arctic',    bg:'#020810',fg:'#50c8f0', hue:-0.62,sat:0.9, temp:-1},
+  {id:'jade',    label:'Jade',      bg:'#001408',fg:'#20c080', hue:-0.36,sat:1.3, temp:-0.5},
+  {id:'violet',  label:'Violet',    bg:'#080010',fg:'#9040e0', hue:0.62, sat:1.4, temp:-0.4},
+  {id:'rose',    label:'Rose',      bg:'#140008',fg:'#e050a0', hue:0.44, sat:1.3, temp:0.5},
+  {id:'rainbow', label:'Rainbow',   bg:'#050505',fg:'#ffffff', hue:0,    sat:2,   temp:0, rainbow:true},
+  {id:'sepia',   label:'Sepia',     bg:'#0c0800',fg:'#b08050', hue:0.05, sat:0.5, temp:0.4},
+  {id:'neon',    label:'Neon',      bg:'#000000',fg:'#00ffcc', hue:-0.4, sat:3,   temp:-0.8},
+];
+
+let activePalette="silver";
+let rainbowTime=0;
+
+function applyPalette(id){
+  const p=PALETTES.find(x=>x.id===id);
+  if(!p) return;
+  activePalette=id;
+  if(!p.rainbow){
+    C.hue=p.hue; C.sat=p.sat; C.temp=p.temp;
+  }
+  document.querySelectorAll('.pal-swatch').forEach(s=>s.classList.toggle('active',s.dataset.id===id));
+}
+
+// Build swatch grid
+const palGrid=document.getElementById('pal-grid');
+PALETTES.forEach(p=>{
+  const sw=document.createElement('div');
+  sw.className='pal-swatch'+(p.id===activePalette?' active':'');
+  sw.dataset.id=p.id;
+  sw.style.background=p.bg;
+  sw.style.color=p.fg;
+  sw.style.borderColor=p.fg+'44';
+  sw.textContent=p.label;
+  if(p.rainbow){
+    sw.style.background='linear-gradient(135deg,#300,#033,#003,#303,#330)';
+    sw.style.color='#fff';
+  }
+  sw.addEventListener('click',()=>{ applyPalette(p.id); });
+  palGrid.appendChild(sw);
+});
+
+// Palette grid is embedded in sidebar — no dialog needed
+
+function applyBlur(){
+  const px = C.blur * 28;
+  if(mode === 'ascii'){
+    asciiBlurEl.style.backdropFilter = `blur(${px}px)`;
+    asciiBlurEl.style.webkitBackdropFilter = `blur(${px}px)`;
+  } else {
+    glassEl.style.backdropFilter = `blur(${px}px)`;
+    glassEl.style.webkitBackdropFilter = `blur(${px}px)`;
+  }
+}
+
+const sidebar = document.getElementById('sidebar');
+// Close sidebar when clicking canvas
+canvas.addEventListener('click', () => sidebar.classList.remove('open'));
+// Prevent sb-toggle click from immediately closing via canvas listener
+document.getElementById('sb-toggle').addEventListener('click', e => {
+  e.stopPropagation();
+  sidebar.classList.toggle('open');
+});
+
+// Apply initial blur to ascii overlay (glass stays 0 until fluid mode active)
+asciiBlurEl.style.backdropFilter=`blur(${C.blur*28}px)`;
+asciiBlurEl.style.webkitBackdropFilter=`blur(${C.blur*28}px)`;
+
+for(const [id,key] of Object.entries(CTRL_MAP)){
+  const el=document.getElementById(id);
+  if(!el) continue;
+  el.addEventListener('input',e=>{
+    C[key]=+e.target.value;
+    if(id==='iBlur') applyBlur();
+  });
+}
+
+const copyBtn  = document.getElementById('iCopy');
+const jsonOut  = document.getElementById('json-out');
+const exportBtn= document.getElementById('iExport');
+
+copyBtn.addEventListener('click', () => {
+  const json = JSON.stringify(C, null, 2);
+  jsonOut.value = json;
+  jsonOut.style.display = 'block';
+  jsonOut.select();
+  // Try clipboard anyway — works outside sandbox
+  try { navigator.clipboard.writeText(json); } catch(e){}
+  copyBtn.textContent='✓ shown below'; copyBtn.classList.add('copied');
+  setTimeout(()=>{ copyBtn.textContent='⎘ settings json'; copyBtn.classList.remove('copied'); }, 2500);
+});
+
+exportBtn.addEventListener('click', () => {
+  // Read the current source and bake in the current C values + active palette + active ramp
+  const src = document.documentElement.outerHTML;
+
+  // Patch the C defaults in the exported source
+  const patchedC = JSON.stringify(C);
+  const patchedRamp = JSON.stringify(activeRamp);
+  const patchedPalette = JSON.stringify(activePalette);
+
+  let out = src
+    // Replace the C = { ... } block with current values
+    .replace(/const C = \{[\s\S]*?\};/, `const C = ${patchedC};`)
+    // Patch activeRamp initial value
+    .replace(/let activeRamp = " `.-':,;^~Il!i><+_?][}{1)(|/fjrxnuvczXYUJCLQ0OZmwqpdbkha*#MW&8%B@$";]+;/, `let activeRamp = ${patchedRamp};`)
+    // Patch activePalette initial value
+    .replace(/let activePalette=[^;]+;/, `let activePalette=${patchedPalette};`)
+    // Remove sidebar open state if any
+    .replace(/class="([^"]*)\bopen\b([^"]*)"/g, 'class="$1$2"')
+    // Ensure page starts in correct mode - bake the active mode
+    .replace(/let mode='[^']+';/, `let mode='ascii';`);
+
+  const blob = new Blob([out], {type:'text/html'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'golden-fluid.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
+
+  exportBtn.textContent='✓ downloading';
+  setTimeout(()=>{ exportBtn.textContent='↓ export html'; }, 2000);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WGSL — Shared struct
+══════════════════════════════════════════════════════════════════════════════ */
+const PAR = /* wgsl */`
+struct Par{
+  dt:f32,t:f32,sw:f32,sh:f32,
+  cw:f32,ch:f32,mx:f32,my:f32,
+  mvx:f32,mvy:f32,mdn:f32,blur:f32,
+  brt:f32,nscl:f32,nstr:f32,sstr:f32,
+  sspd:f32,damp:f32,dcy:f32,vig:f32,
+  edge:f32,temp:f32,hue:f32,sat:f32,
+  contrast:f32,mid:f32,_a:f32,_b:f32,
+  _c:f32,_d:f32,_e:f32,_f:f32
+}
+@group(0) @binding(0) var<uniform> q:Par;
+`;
+
+const NOISE = /* wgsl */`
+fn _h(p:vec2f)->f32{var r=fract(p*vec2f(127.1,311.7));r+=dot(r,r+19.19);return fract(r.x*r.y);}
+fn _v(p:vec2f)->f32{
+  let i=floor(p);let f=fract(p);let u=f*f*(3.0-2.0*f);
+  return mix(mix(_h(i),_h(i+vec2f(1,0)),u.x),mix(_h(i+vec2f(0,1)),_h(i+vec2f(1,1)),u.x),u.y)*2.0-1.0;
+}
+fn _pot(p:vec2f)->f32{
+  return _v(p)+0.5*_v(p*2.0+vec2f(3.71,1.33))+0.25*_v(p*4.0+vec2f(1.09,7.23));
+}
+fn curl(p:vec2f)->vec2f{
+  let e=0.01;
+  let p0=_pot(p);let px=_pot(p+vec2f(e,0.0));let py=_pot(p+vec2f(0.0,e));
+  return vec2f((py-p0)/e,-(px-p0)/e);
+}
+`;
+
+const BIL = /* wgsl */`
+fn bilV(tex:texture_2d<f32>,uv:vec2f)->vec2f{
+  let fp=uv*vec2f(q.sw,q.sh)-0.5;
+  let bx=i32(floor(fp.x));let by=i32(floor(fp.y));
+  let t=fract(fp);let mxw=i32(q.sw)-1;let myh=i32(q.sh)-1;
+  let v00=textureLoad(tex,vec2i(clamp(bx,  0,mxw),clamp(by,  0,myh)),0).xy;
+  let v10=textureLoad(tex,vec2i(clamp(bx+1,0,mxw),clamp(by,  0,myh)),0).xy;
+  let v01=textureLoad(tex,vec2i(clamp(bx,  0,mxw),clamp(by+1,0,myh)),0).xy;
+  let v11=textureLoad(tex,vec2i(clamp(bx+1,0,mxw),clamp(by+1,0,myh)),0).xy;
+  return mix(mix(v00,v10,t.x),mix(v01,v11,t.x),t.y);
+}
+fn bilS(tex:texture_2d<f32>,uv:vec2f)->f32{
+  let fp=uv*vec2f(q.sw,q.sh)-0.5;
+  let bx=i32(floor(fp.x));let by=i32(floor(fp.y));
+  let t=fract(fp);let mxw=i32(q.sw)-1;let myh=i32(q.sh)-1;
+  let c00=textureLoad(tex,vec2i(clamp(bx,  0,mxw),clamp(by,  0,myh)),0).r;
+  let c10=textureLoad(tex,vec2i(clamp(bx+1,0,mxw),clamp(by,  0,myh)),0).r;
+  let c01=textureLoad(tex,vec2i(clamp(bx,  0,mxw),clamp(by+1,0,myh)),0).r;
+  let c11=textureLoad(tex,vec2i(clamp(bx+1,0,mxw),clamp(by+1,0,myh)),0).r;
+  return mix(mix(c00,c10,t.x),mix(c01,c11,t.x),t.y);
+}
+`;
+
+const AVVEL = PAR+NOISE+BIL+/* wgsl */`
+@group(0) @binding(1) var vR:texture_2d<f32>;
+@group(0) @binding(2) var vW:texture_storage_2d<rgba32float,write>;
+@compute @workgroup_size(8,8)
+fn main(@builtin(global_invocation_id) id:vec3u){
+  let ix=i32(id.x);let iy=i32(id.y);
+  let iw=i32(q.sw);let ih=i32(q.sh);
+  if(ix>=iw||iy>=ih){return;}
+  let uv=(vec2f(f32(ix),f32(iy))+0.5)/vec2f(q.sw,q.sh);
+  let vel=textureLoad(vR,vec2i(ix,iy),0).xy;
+  let puv=clamp(uv-vel*q.dt/vec2f(q.sw,q.sh),vec2f(0.0),vec2f(1.0));
+  var nv=bilV(vR,puv);
+  nv+=curl(uv*q.nscl+q.t*0.08)*q.nstr*q.dt;
+  let pA=0.45+0.55*sin(q.t*0.71);let pB=0.45+0.55*sin(q.t*0.53+1.0);let pC=0.45+0.55*sin(q.t*0.62+2.1);
+  let w1=max(0.0,1.0-distance(uv,vec2f(0.925,0.08))/0.10)*pA;
+  let w2=max(0.0,1.0-distance(uv,vec2f(0.970,0.47))/0.08)*pB;
+  let w3=max(0.0,1.0-distance(uv,vec2f(0.855,0.88))/0.12)*pC;
+  let rate=clamp(q.dt*7.0,0.0,1.0);let sp=q.sspd;
+  if(w1>0.001){nv=mix(nv,vec2f(-58.0, 28.0)*sp,w1*rate);}
+  if(w2>0.001){nv=mix(nv,vec2f(-68.0,-12.0)*sp,w2*rate);}
+  if(w3>0.001){nv=mix(nv,vec2f(-42.0,-52.0)*sp,w3*rate);}
+  if(q.mdn>0.1){
+    let mu=vec2f(q.mx/q.cw,q.my/q.ch);let dm=distance(uv,mu);
+    if(q.mdn>0.8){
+      let wm=max(0.0,1.0-dm/0.09);
+      if(wm>0.001){nv=mix(nv,vec2f(q.mvx,q.mvy),wm*rate*1.5);}
+    }else{
+      let wm=max(0.0,1.0-dm/0.14);
+      if(dm>0.001&&wm>0.001){let tang=vec2f(-(mu.y-uv.y),(mu.x-uv.x))/dm;nv+=tang*wm*4.0*q.dt;}
+    }
+  }
+  nv*=q.damp;
+  if(ix==0||ix==iw-1){nv.x=0.0;} if(iy==0||iy==ih-1){nv.y=0.0;}
+  textureStore(vW,vec2i(ix,iy),vec4f(nv,0.0,1.0));
+}`;
+
+const AVDEN = PAR+BIL+/* wgsl */`
+@group(0) @binding(1) var vR:texture_2d<f32>;
+@group(0) @binding(2) var dR:texture_2d<f32>;
+@group(0) @binding(3) var dW:texture_storage_2d<rgba32float,write>;
+@compute @workgroup_size(8,8)
+fn main(@builtin(global_invocation_id) id:vec3u){
+  let ix=i32(id.x);let iy=i32(id.y);
+  if(ix>=i32(q.sw)||iy>=i32(q.sh)){return;}
+  let uv=(vec2f(f32(ix),f32(iy))+0.5)/vec2f(q.sw,q.sh);
+  let vel=textureLoad(vR,vec2i(ix,iy),0).xy;
+  let puv=clamp(uv-vel*q.dt/vec2f(q.sw,q.sh),vec2f(0.0),vec2f(1.0));
+  var den=bilS(dR,puv);
+  let pA=0.45+0.55*sin(q.t*0.71);let pB=0.45+0.55*sin(q.t*0.53+1.0);let pC=0.45+0.55*sin(q.t*0.62+2.1);
+  den+=max(0.0,1.0-distance(uv,vec2f(0.925,0.08))/0.10)*pA*4.2*q.dt*q.sstr;
+  den+=max(0.0,1.0-distance(uv,vec2f(0.970,0.47))/0.08)*pB*4.8*q.dt*q.sstr;
+  den+=max(0.0,1.0-distance(uv,vec2f(0.855,0.88))/0.12)*pC*4.2*q.dt*q.sstr;
+  if(q.mdn>0.8){let mu=vec2f(q.mx/q.cw,q.my/q.ch);den+=max(0.0,1.0-distance(uv,mu)/0.07)*9.0*q.dt;}
+  textureStore(dW,vec2i(ix,iy),vec4f(clamp(den*q.dcy,0.0,1.0),0.0,0.0,1.0));
+}`;
+
+const WGSL_DIV = PAR+/* wgsl */`
+@group(0) @binding(1) var vR:texture_2d<f32>;
+@group(0) @binding(2) var dW:texture_storage_2d<rgba32float,write>;
+@compute @workgroup_size(8,8)
+fn main(@builtin(global_invocation_id) id:vec3u){
+  let ix=i32(id.x);let iy=i32(id.y);
+  let iw=i32(q.sw);let ih=i32(q.sh);
+  if(ix>=iw||iy>=ih){return;}
+  let mx=iw-1;let my=ih-1;
+  let r=textureLoad(vR,vec2i(min(ix+1,mx),iy),0).x;
+  let l=textureLoad(vR,vec2i(max(ix-1,0), iy),0).x;
+  let u=textureLoad(vR,vec2i(ix,min(iy+1,my)),0).y;
+  let d=textureLoad(vR,vec2i(ix,max(iy-1,0)), 0).y;
+  textureStore(dW,vec2i(ix,iy),vec4f(0.5*(r-l+u-d),0.0,0.0,1.0));
+}`;
+
+const WGSL_PRES = PAR+/* wgsl */`
+@group(0) @binding(1) var pR:texture_2d<f32>;
+@group(0) @binding(2) var vD:texture_2d<f32>;
+@group(0) @binding(3) var pW:texture_storage_2d<rgba32float,write>;
+@compute @workgroup_size(8,8)
+fn main(@builtin(global_invocation_id) id:vec3u){
+  let ix=i32(id.x);let iy=i32(id.y);
+  let iw=i32(q.sw);let ih=i32(q.sh);
+  if(ix>=iw||iy>=ih){return;}
+  let mx=iw-1;let my=ih-1;
+  let pr=textureLoad(pR,vec2i(min(ix+1,mx),iy),0).r;
+  let pl=textureLoad(pR,vec2i(max(ix-1,0), iy),0).r;
+  let pu=textureLoad(pR,vec2i(ix,min(iy+1,my)),0).r;
+  let pd=textureLoad(pR,vec2i(ix,max(iy-1,0)), 0).r;
+  let dv=textureLoad(vD,vec2i(ix,iy),0).r;
+  textureStore(pW,vec2i(ix,iy),vec4f(0.25*(pr+pl+pu+pd-dv),0.0,0.0,1.0));
+}`;
+
+const WGSL_PROJ = PAR+/* wgsl */`
+@group(0) @binding(1) var vR:texture_2d<f32>;
+@group(0) @binding(2) var pR:texture_2d<f32>;
+@group(0) @binding(3) var vW:texture_storage_2d<rgba32float,write>;
+@compute @workgroup_size(8,8)
+fn main(@builtin(global_invocation_id) id:vec3u){
+  let ix=i32(id.x);let iy=i32(id.y);
+  let iw=i32(q.sw);let ih=i32(q.sh);
+  if(ix>=iw||iy>=ih){return;}
+  let mx=iw-1;let my=ih-1;
+  let vel=textureLoad(vR,vec2i(ix,iy),0).xy;
+  let pr=textureLoad(pR,vec2i(min(ix+1,mx),iy),0).r;
+  let pl=textureLoad(pR,vec2i(max(ix-1,0), iy),0).r;
+  let pu=textureLoad(pR,vec2i(ix,min(iy+1,my)),0).r;
+  let pd=textureLoad(pR,vec2i(ix,max(iy-1,0)), 0).r;
+  var nv=vel-0.5*vec2f(pr-pl,pu-pd);
+  if(ix==0||ix==mx){nv.x=0.0;} if(iy==0||iy==my){nv.y=0.0;}
+  textureStore(vW,vec2i(ix,iy),vec4f(nv,0.0,1.0));
+}`;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WGSL — Reaction-Diffusion (Gray-Scott)
+   Bindings: uniform | read-state | write-state | write-display(dT[0])
+   Two chemicals: A (feed), B (self-replicating). f=0.055 k=0.062 = coral/worm
+══════════════════════════════════════════════════════════════════════════════ */
+const WGSL_RD = PAR+/* wgsl */`
+@group(0) @binding(1) var rdR:texture_2d<f32>;
+@group(0) @binding(2) var rdW:texture_storage_2d<rgba32float,write>;
+@group(0) @binding(3) var dW:texture_storage_2d<rgba32float,write>;
+@compute @workgroup_size(8,8)
+fn main(@builtin(global_invocation_id) id:vec3u){
+  let ix=i32(id.x);let iy=i32(id.y);
+  let iw=i32(q.sw);let ih=i32(q.sh);
+  if(ix>=iw||iy>=ih){return;}
+  let uv=(vec2f(f32(ix),f32(iy))+0.5)/vec2f(q.sw,q.sh);
+  let cur=textureLoad(rdR,vec2i(ix,iy),0);
+  let A=cur.r; let B=cur.g;
+  let mx=iw-1; let my=ih-1;
+  let cN=textureLoad(rdR,vec2i(ix,min(iy+1,my)),0);
+  let cS=textureLoad(rdR,vec2i(ix,max(iy-1,0)),0);
+  let cE=textureLoad(rdR,vec2i(min(ix+1,mx),iy),0);
+  let cW=textureLoad(rdR,vec2i(max(ix-1,0),iy),0);
+  let lapA=cN.r+cS.r+cE.r+cW.r-4.0*A;
+  let lapB=cN.g+cS.g+cE.g+cW.g-4.0*B;
+  let f=0.055; let k=0.062;
+  let Da=0.20; let Db=0.10;
+  let rxn=A*B*B;
+  let dt=0.85;
+  var nA=A+dt*(Da*lapA-rxn+f*(1.0-A));
+  var nB=B+dt*(Db*lapB+rxn-(f+k)*B);
+  // Pulsing B injection at right-side sources
+  let pA=0.45+0.55*sin(q.t*0.71);
+  let pBv=0.45+0.55*sin(q.t*0.53+1.0);
+  let pC=0.45+0.55*sin(q.t*0.62+2.1);
+  nB+=max(0.0,1.0-distance(uv,vec2f(0.925,0.08))/0.08)*pA*0.014*q.sstr;
+  nB+=max(0.0,1.0-distance(uv,vec2f(0.970,0.47))/0.07)*pBv*0.018*q.sstr;
+  nB+=max(0.0,1.0-distance(uv,vec2f(0.855,0.88))/0.09)*pC*0.014*q.sstr;
+  if(q.mdn>0.8){
+    let mu=vec2f(q.mx/q.cw,q.my/q.ch);
+    nB+=max(0.0,1.0-distance(uv,mu)/0.07)*0.05;
+  }
+  nA=clamp(nA,0.0,1.0); nB=clamp(nB,0.0,1.0);
+  textureStore(rdW,vec2i(ix,iy),vec4f(nA,nB,0.0,1.0));
+  textureStore(dW, vec2i(ix,iy),vec4f(clamp(nB*4.0,0.0,1.0),0.0,0.0,1.0));
+}`;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WGSL — Wave equation
+   Bindings: uniform | read-state(h,v) | write-state | write-display(dT[0])
+   Stores height h in R, velocity v in G
+══════════════════════════════════════════════════════════════════════════════ */
+const WGSL_WV = PAR+/* wgsl */`
+@group(0) @binding(1) var wvR:texture_2d<f32>;
+@group(0) @binding(2) var wvW:texture_storage_2d<rgba32float,write>;
+@group(0) @binding(3) var dW:texture_storage_2d<rgba32float,write>;
+@compute @workgroup_size(8,8)
+fn main(@builtin(global_invocation_id) id:vec3u){
+  let ix=i32(id.x);let iy=i32(id.y);
+  let iw=i32(q.sw);let ih=i32(q.sh);
+  if(ix>=iw||iy>=ih){return;}
+  let uv=(vec2f(f32(ix),f32(iy))+0.5)/vec2f(q.sw,q.sh);
+  let cur=textureLoad(wvR,vec2i(ix,iy),0);
+  let h=cur.r; let v=cur.g;
+  let mx=iw-1; let my=ih-1;
+  let hN=textureLoad(wvR,vec2i(ix,min(iy+1,my)),0).r;
+  let hS=textureLoad(wvR,vec2i(ix,max(iy-1,0)),0).r;
+  let hE=textureLoad(wvR,vec2i(min(ix+1,mx),iy),0).r;
+  let hW=textureLoad(wvR,vec2i(max(ix-1,0),iy),0).r;
+  let lapH=hN+hS+hE+hW-4.0*h;
+  let c2=5.0;
+  let dt=q.dt*2.5;
+  var nv=(v+c2*lapH*dt)*0.9993;
+  var nh=h+nv*dt;
+  // Oscillating sources
+  let pA=sin(q.t*2.8)*0.5;
+  let pBv=sin(q.t*2.3+1.0)*0.5;
+  let pC=sin(q.t*3.1+2.1)*0.5;
+  nh+=max(0.0,1.0-distance(uv,vec2f(0.925,0.08))/0.055)*pA*0.18*q.sstr;
+  nh+=max(0.0,1.0-distance(uv,vec2f(0.970,0.47))/0.045)*pBv*0.22*q.sstr;
+  nh+=max(0.0,1.0-distance(uv,vec2f(0.855,0.88))/0.065)*pC*0.18*q.sstr;
+  if(q.mdn>0.8){
+    let mu=vec2f(q.mx/q.cw,q.my/q.ch);
+    nv+=max(0.0,1.0-distance(uv,mu)/0.07)*0.8;
+  }
+  if(ix==0||ix==mx||iy==0||iy==my){nh=0.0;nv=0.0;}
+  else{nh=clamp(nh,-1.0,1.0);}
+  textureStore(wvW,vec2i(ix,iy),vec4f(nh,nv,0.0,1.0));
+  textureStore(dW, vec2i(ix,iy),vec4f((nh+1.0)*0.5,0.0,0.0,1.0));
+}`;
+
+const WGSL_SCENE = PAR+/* wgsl */`
+@group(0) @binding(1) var dT:texture_2d<f32>;
+struct VO{@builtin(position) pos:vec4f}
+@vertex fn vs(@builtin(vertex_index) vi:u32)->VO{
+  var o:VO;o.pos=vec4f(f32(vi&1u)*4.0-1.0,f32(vi>>1u)*4.0-1.0,0.0,1.0);return o;
+}
+fn hueShift(c:vec3f,a:f32)->vec3f{
+  let ca=cos(a);let sa=sin(a);
+  return clamp(vec3f(
+    c.r*(0.299+0.701*ca+0.168*sa)+c.g*(0.587-0.587*ca-0.330*sa)+c.b*(0.114-0.114*ca+0.495*sa),
+    c.r*(0.299-0.299*ca+0.328*sa)+c.g*(0.587+0.413*ca+0.035*sa)+c.b*(0.114-0.114*ca-0.292*sa),
+    c.r*(0.299-0.300*ca-0.197*sa)+c.g*(0.587-0.588*ca+0.443*sa)+c.b*(0.114+0.886*ca-0.025*sa)
+  ),vec3f(0.0),vec3f(1.0));
+}
+fn satCol(c:vec3f,s:f32)->vec3f{
+  let lum=dot(c,vec3f(0.299,0.587,0.114));
+  return clamp(mix(vec3f(lum),c,s),vec3f(0.0),vec3f(1.0));
+}
+fn gold(c:f32)->vec3f{
+  let t=clamp(c,0.0,1.0);
+  if(t<0.12){return mix(vec3f(0.008,0.003,0.000),vec3f(0.055,0.022,0.003),t/0.12);}
+  if(t<0.28){return mix(vec3f(0.055,0.022,0.003),vec3f(0.200,0.088,0.014),(t-0.12)/0.16);}
+  if(t<0.48){return mix(vec3f(0.200,0.088,0.014),vec3f(0.480,0.240,0.040),(t-0.28)/0.20);}
+  if(t<0.68){return mix(vec3f(0.480,0.240,0.040),vec3f(0.780,0.500,0.095),(t-0.48)/0.20);}
+  if(t<0.85){return mix(vec3f(0.780,0.500,0.095),vec3f(0.930,0.760,0.210),(t-0.68)/0.17);}
+            return mix(vec3f(0.930,0.760,0.210),vec3f(0.985,0.950,0.660),(t-0.85)/0.15);
+}
+fn sd(cx:i32,cy:i32,mxw:i32,myh:i32)->f32{
+  return textureLoad(dT,vec2i(clamp(cx,0,mxw),clamp(cy,0,myh)),0).r;
+}
+@fragment fn fs(vo:VO)->@location(0) vec4f{
+  let uv=vec2f(vo.pos.x/q.cw,vo.pos.y/q.ch);
+  let iw=i32(q.sw);let ih=i32(q.sh);
+  let fp=uv*vec2f(q.sw,q.sh)-0.5;
+  let bx=i32(floor(fp.x));let by=i32(floor(fp.y));
+  let tf=fract(fp);let mxw=iw-1;let myh=ih-1;
+  let d00=sd(bx,  by,  mxw,myh);let d10=sd(bx+1,by,  mxw,myh);
+  let d01=sd(bx,  by+1,mxw,myh);let d11=sd(bx+1,by+1,mxw,myh);
+  let den=mix(mix(d00,d10,tf.x),mix(d01,d11,tf.x),tf.y);
+  let dxP=sd(bx+2,by,  mxw,myh);let dxM=sd(bx-1,by,  mxw,myh);
+  let dyP=sd(bx,  by+2,mxw,myh);let dyM=sd(bx,  by-1,mxw,myh);
+  let grad=length(vec2f(dxP-dxM,dyP-dyM))*0.35;
+  // contrast + midtone on density before palette lookup
+  let dc=clamp(0.5+(den-0.5)*q.contrast,0.0,1.0);
+  let dm=pow(dc,q.mid);
+  var col=gold(pow(dm,0.72));
+  col+=vec3f(0.92,0.68,0.14)*grad*q.edge;
+  col.r=clamp(col.r*(1.0+q.temp*0.45),0.0,1.0);
+  col.b=clamp(col.b*(1.0-q.temp*0.35)+max(0.0,-q.temp)*0.04,0.0,1.0);
+  // saturation + hue rotation
+  col=satCol(col,q.sat);
+  col=hueShift(col,q.hue*3.14159);
+  col*=max(0.02,q.brt);
+  col+=vec3f(0.04,0.016,0.002)*uv.x*uv.x*uv.x;
+  let cv=(uv-0.5)*2.0;
+  let vigV=smoothstep(1.75,0.25,length(cv*vec2f(0.85,1.0)));
+  col*=0.18+0.82*vigV;
+  return vec4f(col,1.0);
+}`;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TEXTURES
+══════════════════════════════════════════════════════════════════════════════ */
+const TUSAGE=GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.COPY_SRC;
+function mkTex(){return device.createTexture({size:[SIM,SIM],format:'rgba32float',usage:TUSAGE});}
+const vT=[mkTex(),mkTex()],dT=[mkTex(),mkTex()],pT=[mkTex(),mkTex()],divT=mkTex();
+{
+  const buf=new Float32Array(SIM*SIM*4);
+  for(let y=0;y<SIM;y++) for(let x=0;x<SIM;x++){
+    const u=(x+.5)/SIM,v=(y+.5)/SIM;
+    let d=0;
+    d+=Math.max(0,1-Math.hypot(u-.92,v-.08)/.23)*.93;
+    d+=Math.max(0,1-Math.hypot(u-.97,v-.46)/.22)*.96;
+    d+=Math.max(0,1-Math.hypot(u-.87,v-.88)/.26)*.89;
+    d+=Math.max(0,1-Math.hypot(u-1.02,v-.55)/.40)*.72;
+    const i=(y*SIM+x)*4; buf[i]=Math.min(1,d); buf[i+3]=1;
+  }
+  device.queue.writeTexture({texture:dT[0]},buf,{bytesPerRow:SIM*16},[SIM,SIM]);
+}
+
+// Reaction-Diffusion state textures (R=A, G=B)
+const rdT=[mkTex(),mkTex()];
+{
+  const buf=new Float32Array(SIM*SIM*4);
+  // Fill A=1, B=0
+  for(let i=0;i<SIM*SIM;i++){ buf[i*4]=1; buf[i*4+3]=1; }
+  // Seed 25 random B blobs clustered on the right
+  for(let s=0;s<25;s++){
+    const cx=SIM*0.65+Math.random()*SIM*0.30, cy=Math.random()*SIM;
+    const r=3+Math.random()*5;
+    for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){
+      if(dx*dx+dy*dy>r*r) continue;
+      const px=Math.floor(cx+dx)|0, py=Math.floor(cy+dy)|0;
+      if(px<0||px>=SIM||py<0||py>=SIM) continue;
+      buf[(py*SIM+px)*4+1]=0.25+Math.random()*0.1;
+    }
+  }
+  device.queue.writeTexture({texture:rdT[0]},buf,{bytesPerRow:SIM*16},[SIM,SIM]);
+}
+
+// Wave state textures (R=height, G=velocity) — start flat
+const wvT=[mkTex(),mkTex()];
+// (all zeros by default is fine for wave)
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PIPELINES
+══════════════════════════════════════════════════════════════════════════════ */
+const CS=GPUShaderStage.COMPUTE, VF=GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT;
+function bgl(...e){return device.createBindGroupLayout({entries:e});}
+function pl(...b){return device.createPipelineLayout({bindGroupLayouts:b});}
+function cpipe(src,layout){
+  return device.createComputePipeline({layout,compute:{module:device.createShaderModule({code:src}),entryPoint:'main'}});
+}
+const UE =v=>({binding:0,visibility:v,buffer:{type:'uniform'}});
+const TE =b=>({binding:b,visibility:CS,texture:{sampleType:'unfilterable-float',viewDimension:'2d'}});
+const STE=b=>({binding:b,visibility:CS,storageTexture:{access:'write-only',format:'rgba32float',viewDimension:'2d'}});
+const TRF=b=>({binding:b,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:'unfilterable-float',viewDimension:'2d'}});
+
+const lAV=bgl(UE(CS),TE(1),STE(2)),        lAD=bgl(UE(CS),TE(1),TE(2),STE(3));
+const lDV=bgl(UE(CS),TE(1),STE(2)),        lPR=bgl(UE(CS),TE(1),TE(2),STE(3));
+const lPJ=bgl(UE(CS),TE(1),TE(2),STE(3)),  lRD=bgl(UE(VF),TRF(1));
+
+const ppAV=cpipe(AVVEL,pl(lAV)),    ppAD=cpipe(AVDEN,pl(lAD));
+const ppDV=cpipe(WGSL_DIV,pl(lDV)), ppPR=cpipe(WGSL_PRES,pl(lPR));
+const ppPJ=cpipe(WGSL_PROJ,pl(lPJ));
+
+// Shared layout for RD + Wave: uniform | read-tex | write-state | write-display
+const lSim2=bgl(UE(CS),TE(1),STE(2),STE(3));
+const ppRDs=cpipe(WGSL_RD,pl(lSim2));
+const ppWVs=cpipe(WGSL_WV,pl(lSim2));
+
+const sceneMod=device.createShaderModule({code:WGSL_SCENE});
+const ppRD=device.createRenderPipeline({
+  layout:pl(lRD),
+  vertex:  {module:sceneMod,entryPoint:'vs'},
+  fragment:{module:sceneMod,entryPoint:'fs',targets:[{format:canvasFmt}]},
+  primitive:{topology:'triangle-list'}
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UNIFORM + BIND GROUPS
+══════════════════════════════════════════════════════════════════════════════ */
+const uGPU=device.createBuffer({size:128,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+const uArr=new Float32Array(32);
+
+function bg(layout,...res){
+  return device.createBindGroup({layout,entries:res.map((r,i)=>({
+    binding:i, resource:r instanceof GPUBuffer?{buffer:r}:r.createView()
+  }))});
+}
+const bgAV=[bg(lAV,uGPU,vT[0],vT[1]),bg(lAV,uGPU,vT[1],vT[0])];
+const bgAD=[];
+for(let v=0;v<2;v++){bgAD.push([]);for(let d=0;d<2;d++)bgAD[v].push(bg(lAD,uGPU,vT[v],dT[d],dT[1-d]));}
+const bgDV=[bg(lDV,uGPU,vT[0],divT),bg(lDV,uGPU,vT[1],divT)];
+const bgPR=[bg(lPR,uGPU,pT[0],divT,pT[1]),bg(lPR,uGPU,pT[1],divT,pT[0])];
+const bgPJ=[];
+for(let v=0;v<2;v++){bgPJ.push([]);for(let p=0;p<2;p++)bgPJ[v].push(bg(lPJ,uGPU,vT[v],pT[p],vT[1-v]));}
+const bgRD=[bg(lRD,uGPU,dT[0]),bg(lRD,uGPU,dT[1])];
+
+// RD ping-pong: read rdT[i], write rdT[1-i], write dT[0] for display
+const bgRDs=[bg(lSim2,uGPU,rdT[0],rdT[1],dT[0]),bg(lSim2,uGPU,rdT[1],rdT[0],dT[0])];
+// Wave ping-pong: same pattern
+const bgWVs=[bg(lSim2,uGPU,wvT[0],wvT[1],dT[0]),bg(lSim2,uGPU,wvT[1],wvT[0],dT[0])];
+
+// Ping-pong index trackers for RD and Wave
+let rdI=0, wvI=0;
+
+/* (density data read synchronously via drawImage in renderAscii/renderTopo) */
+let densityData=new Float32Array(SIM*SIM*4); // still used by TOPO mode
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ASCII TEXT MODE
+   — Samples the already-rendered WebGPU canvas via drawImage (synchronous,
+     zero GPU readback overhead), renders with batched canvas2D fillText.
+══════════════════════════════════════════════════════════════════════════════ */
+// Dense-to-sparse brightness ramp
+const CHAR_RAMP_DEFAULT = " `.-':,;^~Il!i><+_?][}{1)(|/fjrxnuvczXYUJCLQ0OZmwqpdbkha*#MW&8%B@$";
+let activeRamp = CHAR_RAMP_DEFAULT;
+
+const SYM_PRESETS = {
+  default:   CHAR_RAMP_DEFAULT,
+  braille:   " ⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟⠠⠡⠢⠣⠤⠥⠦⠧⠨⠩⠪⠫⠬⠭⠮⠯⠰⠱⠲⠳⠴⠵⠶⠷⠸⠹⠺⠻⠼⠽⠾⠿⡀⡁⡂⡃⡄⡅⡆⡇⡈⡉⡊⡋⡌⡍⡎⡏⡐⡑⡒⡓⡔⡕⡖⡗⡘⡙⡚⡛⡜⡝⡞⡟⡠⡡⡢⡣⡤⡥⡦⡧⡨⡩⡪⡫⡬⡭⡮⡯⡰⡱⡲⡳⡴⡵⡶⡷⡸⡹⡺⡻⡼⡽⡾⡿⢀⢁⢂⢃⢄⢅⢆⢇⢈⢉⢊⢋⢌⢍⢎⢏⢐⢑⢒⢓⢔⢕⢖⢗⢘⢙⢚⢛⢜⢝⢞⢟⢠⢡⢢⢣⢤⢥⢦⢧⢨⢩⢪⢫⢬⢭⢮⢯⢰⢱⢲⢳⢴⢵⢶⢷⢸⢹⢺⢻⢼⢽⢾⢿⣀⣁⣂⣃⣄⣅⣆⣇⣈⣉⣊⣋⣌⣍⣎⣏⣐⣑⣒⣓⣔⣕⣖⣗⣘⣙⣚⣛⣜⣝⣞⣟⣠⣡⣢⣣⣤⣥⣦⣧⣨⣩⣪⣫⣬⣭⣮⣯⣰⣱⣲⣳⣴⣵⣶⣷⣸⣹⣺⣻⣼⣽⣾⣿",
+  blocks:    " ·:░▒▓█",
+  katakana:  " ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ",
+  binary:    " ·01!|/\\{}[]<>^*#",
+  math:      " ·∙∘○◯∅∆∇∂∫∏∑√∞≈≠≤≥±×÷αβγδεζθλμπρστφψω",
+  cards:     " ·♩♪♫♬♭♮♯♠♣♥♦⚀⚁⚂⚃⚄⚅",
+  runic:     " ·ᚠᚢᚦᚨᚩᚪᚫᚬᚭᚮᚯᚰᚱᚲᚳᚴᚵᚶᚷᚸᚹᚺᚻᚼᚽᚾᚿᛀᛁᛂᛃᛄᛅᛆᛇᛈᛉᛊᛋᛌᛍᛎᛏᛐᛑᛒᛓᛔᛕᛖᛗᛘᛙᛚᛛᛜᛝᛞᛟᛠᛡᛢᛣᛤᛥᛦᛧᛨᛩᛪ",
+  boxdraw:   " ·╌─━│┃┄┅┆┇┈┉┊┋┌┍┎┏┐┑┒┓└┕┖┗┘┙┚┛├┝┞┟┠┡┢┣┤┥┦┧┨┩┪┫┬┭┮┯┰┱┲┳┴┵┶┷┸┹┺┻┼┽┾┿╀╁╂╃╄╅╆╇╈╉╊╋╔╗╚╝║═╠╣╦╩╬",
+  geo:       " ·∘○◌◍◎●◐◑◒◓◔◕◖◗◯□■▪▫▬▭▮▯▲△▴▵▶▷▸▹►▻▼▽▾▿◀◁◂◃◄◅◆◇◈◉◊",
+  hiragana:  " ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじすずせぜそぞただちぢっつづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもゃやゅゆょよらりるれろわをん",
+  stars:     " ·✦✧⋆✩✪✫✬✭✮✯✰★✱✲✳✴✵✶✷✸✹✺✻✼✽✾✿❀❁❂❃❄❅❆❇❈❉❊❋",
+  arabic:    " ءآأؤإئابةتثجحخدذرزسشصضطظعغفقكلمنهوىي",
+  tibetan:   " ·ༀ༁༂༃༄༅༆༇༈༉༊་༌།༎༏༐༑༒༓༔༕༖༗༘༙༚༛༜༝༞༟༠༡༢༣༤༥༦༧༨༩༪༫༬༭༮༯༰༱༲༳༴༵༶༷༸༹༺༻༼༽༾༿",
+  circuit:   " ·⊕⊗⊘⊙⊚⊛⊜⊝⊞⊟⊠⊡⊢⊣⊤⊥⊦⊧⊨⊩⊪⊫⊬⊭⊮⊯⊰⊱⊲⊳⊴⊵⊶⊷⊸⊹⊺⊻⊼⊽⊾⊿⋀⋁⋂⋃⋄⋅⋆⋇⋈⋉⋊⋋⋌⋍⋎⋏",
+  dominos:   " ·🀱🀲🀳🀴🀵🀶🀷🀸🀹🀺🀻🀼🀽🀾🀿🁀🁁🁂🁃🁄🁅🁆🁇🁈🁉🁊🁋🁌🁍🁎🁏🁐🁑🁒🁓🁔🁕🁖🁗🁘🁙🁚🁛🁜🁝🁞🁟🁠🁡",
+};
+
+const symSelect = document.getElementById('sym-select2');
+const symInput  = document.getElementById('sym-input');
+
+function setRampFromPreset(id){
+  activeRamp = SYM_PRESETS[id] ?? CHAR_RAMP_DEFAULT;
+}
+setRampFromPreset('default');
+
+symSelect.addEventListener('change', () => {
+  if(symSelect.value === 'custom'){
+    symInput.hidden = false;
+    symInput.focus();
+    applyCustomInput();
+  } else {
+    symInput.hidden = true;
+    setRampFromPreset(symSelect.value);
+  }
+});
+
+function applyCustomInput(){
+  const v = symInput.value.trim();
+  const unique = v.length > 0 ? [...new Set([...v])].join('') : '';
+  activeRamp = unique.length >= 2 ? ' ' + unique : CHAR_RAMP_DEFAULT;
+}
+symInput.addEventListener('input', applyCustomInput);
+
+const asciiCvs = document.getElementById('ascii-layer');
+const asciiCtx = asciiCvs.getContext('2d');
+
+// Tiny canvas for synchronous pixel sampling of the WebGPU canvas
+let sampCols=110, sampRows=55;
+const sampCvs = document.createElement('canvas');
+sampCvs.width = sampCols; sampCvs.height = sampRows;
+const sampCtx = sampCvs.getContext('2d', {willReadFrequently: true});
+
+function resizeAsciiCanvas(){
+  asciiCvs.width  = Math.floor(asciiCvs.clientWidth  * DPR)|0;
+  asciiCvs.height = Math.floor(asciiCvs.clientHeight * DPR)|0;
+}
+new ResizeObserver(resizeAsciiCanvas).observe(asciiCvs);
+resizeAsciiCanvas();
+
+function renderAscii(){
+  const cols = Math.max(20, Math.round(110 / C.txtsz))|0;
+  const rows = Math.max(10, Math.round(55  / C.txtsz))|0;
+
+  if(sampCvs.width!==cols||sampCvs.height!==rows){
+    sampCvs.width=cols; sampCvs.height=rows;
+  }
+
+  const cvsW=asciiCvs.width, cvsH=asciiCvs.height;
+  const cW=cvsW/cols, cH=cvsH/rows;
+
+  try{ sampCtx.drawImage(canvas, 0, 0, cols, rows); }
+  catch(e){ return; }
+  const px=sampCtx.getImageData(0, 0, cols, rows).data;
+
+  asciiCtx.fillStyle='#030100';
+  asciiCtx.fillRect(0,0,cvsW,cvsH);
+
+  const fs=Math.max(6, Math.round(cH*0.86));
+  asciiCtx.font=`bold ${fs}px 'Courier New',Courier,monospace`;
+  asciiCtx.textBaseline='top';
+
+  // Group by (blur level, color) — blur is brightness-driven: dim = blurry, bright = crisp
+  const byBlur=new Map();
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const base=(r*cols+c)*4;
+      const R=px[base], G=px[base+1], B=px[base+2];
+      const bright=(R*0.299+G*0.587+B*0.114)/255;
+      if(bright<0.015) continue;
+
+      const charB=Math.min(1,(bright/Math.max(0.02,C.brt))*C.sym);
+      const ci=Math.min(activeRamp.length-1,(charB*activeRamp.length)|0);
+      const ch=activeRamp[ci];
+      if(ch===' ') continue;
+
+      // dim characters get more blur; quantize to 0.5px steps
+      const blurQ=Math.round((1-bright)*3*2)/2;
+      if(!byBlur.has(blurQ)) byBlur.set(blurQ,new Map());
+      const colorMap=byBlur.get(blurQ);
+      const key=((R>>4)<<8)|((G>>4)<<4)|(B>>4);
+      if(!colorMap.has(key)) colorMap.set(key,{R,G,B,calls:[]});
+      colorMap.get(key).calls.push(ch, c*cW, r*cH);
+    }
+  }
+
+  for(const [blurQ,colorMap] of byBlur){
+    asciiCtx.filter=blurQ>0?`blur(${blurQ}px)`:'none';
+    for(const {R,G,B,calls} of colorMap.values()){
+      asciiCtx.fillStyle=`rgb(${R},${G},${B})`;
+      for(let j=0;j<calls.length;j+=3)
+        asciiCtx.fillText(calls[j],calls[j+1],calls[j+2]);
+    }
+  }
+  asciiCtx.filter='none';
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOPO MODE — topographic contour map via marching squares
+   Gold isolines on transparent overlay, fluid visible underneath
+══════════════════════════════════════════════════════════════════════════════ */
+const contourCtx=contourCvs.getContext('2d');
+
+// Marching squares: which edge pairs are crossed for each case
+// Corners: bit3=TL, bit2=TR, bit1=BR, bit0=BL
+// Edges: 0=top(TL→TR), 1=right(TR→BR), 2=bottom(BR→BL), 3=left(BL→TL)
+const MS=[
+  [],          // 0
+  [[2,3]],     // 1  BL
+  [[1,2]],     // 2  BR
+  [[1,3]],     // 3  BR+BL
+  [[0,1]],     // 4  TR
+  null,        // 5  saddle TR+BL
+  [[0,2]],     // 6  TR+BR
+  [[0,3]],     // 7  TR+BR+BL
+  [[0,3]],     // 8  TL
+  [[0,2]],     // 9  TL+BL
+  null,        // 10 saddle TL+BR
+  [[0,1]],     // 11 TL+BR+BL
+  [[1,3]],     // 12 TL+TR
+  [[1,2]],     // 13 TL+TR+BL
+  [[2,3]],     // 14 TL+TR+BR
+  [],          // 15
+];
+
+// Gold tones for each contour band
+const THRESH=[0.06,0.12,0.22,0.34,0.48,0.63,0.79,0.92];
+const TOPO_COLORS=[
+  'rgba(55,22,3,0.55)',
+  'rgba(90,38,5,0.60)',
+  'rgba(130,58,8,0.65)',
+  'rgba(175,88,14,0.70)',
+  'rgba(215,125,22,0.75)',
+  'rgba(245,168,38,0.80)',
+  'rgba(255,210,75,0.85)',
+  'rgba(255,245,160,0.90)',
+];
+const TOPO_WIDTH=[0.5,0.6,0.7,0.8,0.85,0.9,0.95,1.0];
+
+function edgePt(edge,x,y,cW,cH,dTL,dTR,dBR,dBL,thresh){
+  let ax,ay,bx,by,da,db;
+  if(edge===0){ax=x*cW;ay=y*cH;bx=(x+1)*cW;by=y*cH;da=dTL;db=dTR;}
+  else if(edge===1){ax=(x+1)*cW;ay=y*cH;bx=(x+1)*cW;by=(y+1)*cH;da=dTR;db=dBR;}
+  else if(edge===2){ax=(x+1)*cW;ay=(y+1)*cH;bx=x*cW;by=(y+1)*cH;da=dBR;db=dBL;}
+  else{ax=x*cW;ay=(y+1)*cH;bx=x*cW;by=y*cH;da=dBL;db=dTL;}
+  const t=Math.abs(db-da)<1e-6?0.5:(thresh-da)/(db-da);
+  return [ax+(bx-ax)*t, ay+(by-ay)*t];
+}
+
+// Shared low-res sample canvas for TOPO readback
+const topoSampCvs=document.createElement('canvas');
+topoSampCvs.width=SIM; topoSampCvs.height=SIM;
+const topoSampCtx=topoSampCvs.getContext('2d',{willReadFrequently:true});
+
+function renderTopo(){
+  // Sample WebGPU canvas at SIM resolution synchronously
+  try{ topoSampCtx.drawImage(canvas,0,0,SIM,SIM); }
+  catch(e){ return; }
+  const px=topoSampCtx.getImageData(0,0,SIM,SIM).data;
+  // Rebuild densityData from R channel (0-255 → 0-1)
+  for(let i=0;i<SIM*SIM;i++) densityData[i*4]=px[i*4]/255;
+
+  const cW=contourCvs.width, cH=contourCvs.height;
+  contourCtx.clearRect(0,0,cW,cH);
+
+  // dark background
+  contourCtx.fillStyle='rgba(2,1,0,0.88)';
+  contourCtx.fillRect(0,0,cW,cH);
+
+  const cellW=cW/(SIM-1), cellH=cH/(SIM-1);
+
+  for(let ti=0;ti<THRESH.length;ti++){
+    const thresh=THRESH[ti];
+    contourCtx.strokeStyle=TOPO_COLORS[ti];
+    contourCtx.lineWidth=TOPO_WIDTH[ti]*DPR;
+    contourCtx.beginPath();
+
+    for(let y=0;y<SIM-1;y++){
+      for(let x=0;x<SIM-1;x++){
+        const dTL=densityData[(y*SIM+x)*4];
+        const dTR=densityData[(y*SIM+x+1)*4];
+        const dBR=densityData[((y+1)*SIM+x+1)*4];
+        const dBL=densityData[((y+1)*SIM+x)*4];
+
+        const c=((dTL>=thresh)?8:0)|((dTR>=thresh)?4:0)|
+                ((dBR>=thresh)?2:0)|((dBL>=thresh)?1:0);
+
+        let segs=MS[c];
+        if(segs===null){
+          // saddle: disambiguate by center average
+          const center=(dTL+dTR+dBR+dBL)*0.25;
+          if(c===5)  segs=center>=thresh?[[0,1],[2,3]]:[[0,3],[1,2]];
+          else       segs=center>=thresh?[[0,3],[1,2]]:[[0,1],[2,3]];
+        }
+
+        for(const [e1,e2] of segs){
+          const p1=edgePt(e1,x,y,cellW,cellH,dTL,dTR,dBR,dBL,thresh);
+          const p2=edgePt(e2,x,y,cellW,cellH,dTL,dTR,dBR,dBL,thresh);
+          contourCtx.moveTo(p1[0],p1[1]);
+          contourCtx.lineTo(p2[0],p2[1]);
+        }
+      }
+    }
+    contourCtx.stroke();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MODE SWITCHING
+══════════════════════════════════════════════════════════════════════════════ */
+let mode='ascii';
+document.querySelectorAll('#sb-modes button').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const prev=mode;
+    mode=btn.dataset.mode;
+    document.querySelectorAll('#sb-modes button').forEach(b=>b.classList.toggle('active',b===btn));
+
+    // Clear previous overlay to avoid ghost frames
+    if(prev==='ascii'){ asciiCtx.clearRect(0,0,asciiCvs.width,asciiCvs.height); }
+    if(prev==='topo'){  contourCtx.clearRect(0,0,contourCvs.width,contourCvs.height); }
+
+    asciiLayer.hidden=(mode!=='ascii');
+    asciiBg.style.display=(mode==='ascii')?'block':'none';
+    asciiBlurEl.style.display=(mode==='ascii')?'block':'none';
+    contourCvs.hidden=(mode!=='topo');
+    glassEl.style.display=(mode==='ascii')?'none':'';
+    applyBlur();
+  });
+});
+// Init state matches default mode
+asciiLayer.hidden=false;
+asciiBg.style.display='block';
+asciiBlurEl.style.display='block';
+glassEl.style.display='none';
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOUSE / TOUCH
+══════════════════════════════════════════════════════════════════════════════ */
+let mx=0,my=0,pvx=0,pvy=0,mdn=0,pmx=0,pmy=0,pressed=false,isCtrl=false,hoverTid=null;
+function mov(x,y){
+  const dx=x-pmx,dy=y-pmy; pmx=x; pmy=y;
+  mx=x*DPR; my=y*DPR;
+  const s=SIM/Math.max(1,canvas.clientWidth)*60;
+  pvx=dx*s; pvy=dy*s;
+  if(!pressed&&!isCtrl){ mdn=0.5; clearTimeout(hoverTid); hoverTid=setTimeout(()=>{if(!pressed)mdn=0;},200); }
+}
+canvas.addEventListener('mousemove',  e=>mov(e.clientX,e.clientY));
+canvas.addEventListener('mousedown',  e=>{pressed=true;mdn=1;mov(e.clientX,e.clientY);});
+canvas.addEventListener('mouseup',    ()=>{pressed=false;mdn=0;});
+canvas.addEventListener('mouseleave', ()=>{pressed=false;mdn=0;clearTimeout(hoverTid);});
+canvas.addEventListener('touchmove',  e=>{e.preventDefault();const t=e.touches[0];mov(t.clientX,t.clientY);mdn=1;},{passive:false});
+canvas.addEventListener('touchstart', e=>{pressed=true;mdn=1;const t=e.touches[0];mov(t.clientX,t.clientY);});
+canvas.addEventListener('touchend',   ()=>{pressed=false;mdn=0;});
+const ctrlEl=document.getElementById('sidebar');
+ctrlEl.addEventListener('mouseenter',()=>{isCtrl=true;});
+ctrlEl.addEventListener('mouseleave',()=>{isCtrl=false;if(!pressed)mdn=0;});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SIM STEP
+══════════════════════════════════════════════════════════════════════════════ */
+let vI=0,dI=0,pI=0;
+
+// Simulation method
+let simMethod='fluid';
+let rdInited=false, wvInited=false;
+
+function initRD(){
+  if(rdInited) return; rdInited=true;
+  // already seeded at startup — nothing extra needed
+}
+function initWV(){
+  if(wvInited) return; wvInited=true;
+  // wave starts flat — already zeroed by texture default
+}
+
+document.getElementById('iMethod').addEventListener('change',e=>{
+  simMethod=e.target.value;
+  if(simMethod==='rdiff') initRD();
+  if(simMethod==='wave')  initWV();
+});
+function sp(enc,pp,bindGroup){
+  const p=enc.beginComputePass();
+  p.setPipeline(pp); p.setBindGroup(0,bindGroup);
+  p.dispatchWorkgroups(DISP,DISP); p.end();
+}
+
+function simStep(enc){
+  if(simMethod==='fluid'){
+    sp(enc,ppAV,bgAV[vI]);     vI=1-vI;
+    sp(enc,ppAD,bgAD[vI][dI]); dI=1-dI;
+    sp(enc,ppDV,bgDV[vI]);
+    for(let i=0;i<PRES;i++){sp(enc,ppPR,bgPR[pI]);pI=1-pI;}
+    sp(enc,ppPJ,bgPJ[vI][pI]); vI=1-vI;
+  } else if(simMethod==='rdiff'){
+    // Run multiple RD substeps per frame for visible evolution
+    const steps=Math.max(1,Math.round(C.speed*6));
+    for(let i=0;i<steps;i++){
+      sp(enc,ppRDs,bgRDs[rdI]); rdI=1-rdI;
+    }
+  } else if(simMethod==='wave'){
+    const steps=Math.max(1,Math.round(C.speed*3));
+    for(let i=0;i<steps;i++){
+      sp(enc,ppWVs,bgWVs[wvI]); wvI=1-wvI;
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WARM-UP
+══════════════════════════════════════════════════════════════════════════════ */
+{
+  uArr[0]=1/60; uArr[2]=SIM; uArr[3]=SIM; uArr[4]=1920; uArr[5]=1080;
+  uArr[12]=C.brt; uArr[13]=C.nscl; uArr[14]=C.nstr; uArr[15]=C.sstr;
+  uArr[16]=C.sspd; uArr[17]=C.damp; uArr[18]=C.dcy; uArr[19]=1; uArr[20]=C.edge;
+  uArr[21]=C.temp; uArr[22]=C.hue; uArr[23]=C.sat; uArr[24]=C.contrast; uArr[25]=C.mid;
+  device.queue.writeBuffer(uGPU,0,uArr);
+  const enc=device.createCommandEncoder();
+  for(let i=0;i<220;i++) simStep(enc);
+  device.queue.submit([enc.finish()]);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ANIMATION LOOP
+══════════════════════════════════════════════════════════════════════════════ */
+let lastTS=0, firstFrame=true, simTime=0;
+
+function frame(ts){
+  const realDt=Math.min((ts-lastTS)/1000,0.033); lastTS=ts;
+  const dt=realDt*C.speed; simTime+=dt;
+
+  // Rainbow palette: animate hue over time
+  if(activePalette==='rainbow'){
+    rainbowTime+=realDt*0.25;
+    C.hue=Math.sin(rainbowTime)*1.0;
+    C.sat=2.0+Math.sin(rainbowTime*1.3)*0.5;
+  }
+
+  uArr[0]=dt;       uArr[1]=simTime;
+  uArr[2]=SIM;      uArr[3]=SIM;
+  uArr[4]=canvas.width; uArr[5]=canvas.height;
+  uArr[6]=mx;       uArr[7]=my;
+  uArr[8]=pvx;      uArr[9]=pvy;
+  uArr[10]=mdn;     uArr[11]=C.blur;
+  uArr[12]=C.brt;   uArr[13]=C.nscl;
+  uArr[14]=C.nstr;  uArr[15]=C.sstr;
+  uArr[16]=C.sspd;  uArr[17]=C.damp;
+  uArr[18]=C.dcy;   uArr[19]=1.0;
+  uArr[20]=C.edge;  uArr[21]=C.temp;
+  uArr[22]=C.hue;   uArr[23]=C.sat;
+  uArr[24]=C.contrast; uArr[25]=C.mid;
+  device.queue.writeBuffer(uGPU,0,uArr);
+  pvx=pvy=0;
+
+  const enc=device.createCommandEncoder();
+  simStep(enc);
+
+  const rp=enc.beginRenderPass({
+    colorAttachments:[{
+      view:ctx.getCurrentTexture().createView(),
+      loadOp:'clear',storeOp:'store',
+      clearValue:{r:0.008,g:0.003,b:0,a:1}
+    }]
+  });
+  rp.setPipeline(ppRD);
+  // fluid uses ping-pong dI; RD+Wave always write to dT[0]
+  rp.setBindGroup(0, bgRD[simMethod==='fluid' ? dI : 0]);
+  rp.draw(3); rp.end();
+  device.queue.submit([enc.finish()]);
+
+  // Overlay rendering — samples WebGPU canvas synchronously via drawImage
+  if(mode==='ascii') renderAscii();
+  if(mode==='topo')  renderTopo();
+
+  if(firstFrame){ firstFrame=false; boot.classList.add('gone'); }
+  requestAnimationFrame(frame);
+}
+
+requestAnimationFrame(frame);
+</script>
+
+
+</body></html>
