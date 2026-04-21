@@ -236,7 +236,7 @@ select option{background:#080400;color:#c88820}
 <script type="module">
 'use strict';
 
-const SIM  = 256;
+const SIM  = 128;
 const WG   = 8;
 const DISP = SIM / WG;
 const PRES = 20;
@@ -1202,8 +1202,16 @@ function simStep(enc){
    ANIMATION LOOP
 ══════════════════════════════════════════════════════════════════════════════ */
 let lastTS=0, firstFrame=true, simTime=0;
+const TARGET_MS = 1000/24; // cap at 24fps
+
+// Pause GPU loop when tab is hidden
+document.addEventListener('visibilitychange', () => {
+  if(!document.hidden) requestAnimationFrame(frame);
+});
 
 function frame(ts){
+  if(document.hidden) return; // paused — visibilitychange will restart
+  if(ts - lastTS < TARGET_MS){ requestAnimationFrame(frame); return; }
   const realDt=Math.min((ts-lastTS)/1000,0.033); lastTS=ts;
   const dt=realDt*C.speed; simTime+=dt;
 
