@@ -1,8 +1,15 @@
 ---
 ---
 
-<!-- Golden fluid background -->
-<iframe id="fluid-bg" src="/golden-fluid.html" aria-hidden="true" tabindex="-1"></iframe>
+<!-- Ambient blob background -->
+<div class="blob-bg" aria-hidden="true">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+</div>
+
+<!-- Floating text particles (pretext-measured) -->
+<canvas id="text-bg" aria-hidden="true"></canvas>
 
 <!-- HDMI glitch overlay -->
 <canvas id="glitch-canvas" aria-hidden="true"></canvas>
@@ -11,30 +18,92 @@
 <canvas id="grain-canvas" aria-hidden="true"></canvas>
 
 <style>
-  #fluid-bg {
+  /* ── Blob background ─────────────────────────── */
+  .blob-bg {
     position: fixed;
     inset: 0;
-    width: 100vw;
-    height: 100vh;
-    border: none;
-    pointer-events: none;
     z-index: 0;
-    opacity: 0.4;
+    pointer-events: none;
+    overflow: hidden;
   }
 
-  /* Light mode: invert to warm light palette */
-  :root:not([data-theme='dark']) #fluid-bg {
-    filter: invert(1) sepia(0.15) brightness(1.05);
-    opacity: 0.35;
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(100px);
   }
 
-  #glitch-canvas {
+  :root[data-theme='dark'] .blob-1 {
+    width: 50vw; height: 50vw;
+    background: radial-gradient(circle, rgba(160,176,192,0.13) 0%, transparent 70%);
+    top: -15%; left: -12%;
+    animation: blob-drift-1 30s ease-in-out infinite;
+  }
+  :root[data-theme='dark'] .blob-2 {
+    width: 40vw; height: 40vw;
+    background: radial-gradient(circle, rgba(120,138,155,0.10) 0%, transparent 70%);
+    bottom: -12%; right: -8%;
+    animation: blob-drift-2 38s ease-in-out infinite;
+  }
+  :root[data-theme='dark'] .blob-3 {
+    width: 30vw; height: 30vw;
+    background: radial-gradient(circle, rgba(180,186,192,0.07) 0%, transparent 70%);
+    top: 45%; left: 58%;
+    animation: blob-drift-3 24s ease-in-out infinite;
+  }
+
+  :root:not([data-theme='dark']) .blob-1 {
+    width: 50vw; height: 50vw;
+    background: radial-gradient(circle, rgba(155,138,112,0.18) 0%, transparent 70%);
+    top: -15%; left: -12%;
+    animation: blob-drift-1 30s ease-in-out infinite;
+  }
+  :root:not([data-theme='dark']) .blob-2 {
+    width: 40vw; height: 40vw;
+    background: radial-gradient(circle, rgba(175,158,132,0.13) 0%, transparent 70%);
+    bottom: -12%; right: -8%;
+    animation: blob-drift-2 38s ease-in-out infinite;
+  }
+  :root:not([data-theme='dark']) .blob-3 {
+    width: 30vw; height: 30vw;
+    background: radial-gradient(circle, rgba(135,118,92,0.10) 0%, transparent 70%);
+    top: 45%; left: 58%;
+    animation: blob-drift-3 24s ease-in-out infinite;
+  }
+
+  @keyframes blob-drift-1 {
+    0%, 100% { transform: translate(0,    0)    scale(1);    }
+    33%       { transform: translate(6vw,  10vh) scale(1.08); }
+    66%       { transform: translate(-4vw, 5vh)  scale(0.94); }
+  }
+  @keyframes blob-drift-2 {
+    0%, 100% { transform: translate(0,    0)    scale(1);    }
+    40%       { transform: translate(-8vw,-8vh)  scale(1.10); }
+    70%       { transform: translate(4vw, -4vh)  scale(0.92); }
+  }
+  @keyframes blob-drift-3 {
+    0%, 100% { transform: translate(0,    0)   scale(1);    }
+    50%       { transform: translate(-5vw, 8vh) scale(1.12); }
+  }
+
+  /* ── Text canvas ─────────────────────────────── */
+  #text-bg {
     position: fixed;
     inset: 0;
     width: 100vw;
     height: 100vh;
     pointer-events: none;
     z-index: 1;
+  }
+
+  /* ── Glitch + grain ──────────────────────────── */
+  #glitch-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 2;
   }
 
   #grain-canvas {
@@ -46,16 +115,87 @@
     z-index: 150;
     mix-blend-mode: overlay;
   }
-  :root[data-theme='dark'] #grain-canvas { opacity: 0.08; }
+  :root[data-theme='dark'] #grain-canvas      { opacity: 0.08; }
   :root:not([data-theme='dark']) #grain-canvas { opacity: 0.05; }
 </style>
 
 <script>
+  import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext';
+
   function isDark(): boolean {
     return document.documentElement.getAttribute('data-theme') === 'dark';
   }
 
-  // ── HDMI glitch effect ──────────────────────────
+  // ── Floating text particles ──────────────────
+  const textCvs = document.getElementById('text-bg') as HTMLCanvasElement;
+  const textCtx = textCvs.getContext('2d')!;
+
+  const FONT = '11px "IBM Plex Mono", "Courier New", monospace';
+  const WORDS = [
+    'async','void','λ','∇','diff','push','const','ref','→','∞',
+    'null','fn()','{}','[]','git','ssh','01','10','404','200',
+    '=>','merge','δ','∑','π','∅','~/.','curl','rebase','⊕',
+  ];
+
+  type Particle = {
+    text: string; x: number; y: number;
+    vx: number; vy: number; opacity: number; w: number;
+  };
+
+  function makeParticle(cvs: HTMLCanvasElement): Particle {
+    const text = WORDS[Math.floor(Math.random() * WORDS.length)];
+    // Use pretext to measure exact rendered width — no DOM reflow
+    const prep = prepareWithSegments(text, FONT);
+    const { lines } = layoutWithLines(prep, 9999, 16);
+    const w = lines[0]?.width ?? 16;
+    return {
+      text,
+      x: Math.random() * cvs.width,
+      y: Math.random() * cvs.height,
+      vx: (Math.random() - 0.5) * 0.18,
+      vy: (Math.random() - 0.5) * 0.18,
+      opacity: Math.random() * 0.06 + 0.02,
+      w,
+    };
+  }
+
+  function resizeText() {
+    textCvs.width  = window.innerWidth;
+    textCvs.height = window.innerHeight;
+  }
+  resizeText();
+  window.addEventListener('resize', resizeText);
+
+  let particles: Particle[] = [];
+
+  document.fonts.ready.then(() => {
+    particles = Array.from({ length: 32 }, () => makeParticle(textCvs));
+    tickText();
+  });
+
+  function tickText() {
+    textCtx.clearRect(0, 0, textCvs.width, textCvs.height);
+    textCtx.font = FONT;
+    textCtx.textBaseline = 'top';
+
+    const rgb = isDark() ? '195,208,218' : '105,90,68';
+
+    for (const p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x >  textCvs.width  + 40) p.x = -p.w;
+      if (p.x < -p.w - 40)            p.x =  textCvs.width;
+      if (p.y >  textCvs.height + 20) p.y = -16;
+      if (p.y < -16)                  p.y =  textCvs.height;
+
+      textCtx.fillStyle = `rgba(${rgb},${p.opacity})`;
+      textCtx.fillText(p.text, p.x, p.y);
+    }
+
+    setTimeout(tickText, 80); // ~12fps — deliberately light
+  }
+
+  // ── HDMI glitch effect ───────────────────────
   const glitchCvs = document.getElementById('glitch-canvas') as HTMLCanvasElement;
   const glitchCtx = glitchCvs.getContext('2d')!;
 
@@ -74,12 +214,7 @@
 
   function getCurrentGlitchChance(): number {
     const elapsed = performance.now() - startTime;
-    const progress = Math.min(1, elapsed / FREQUENCY_GROWTH_TIME);
-    return BASE_GLITCH_CHANCE + (MAX_GLITCH_CHANCE - BASE_GLITCH_CHANCE) * progress;
-  }
-
-  function spawnGlitch(): void {
-    activeGlitches.push({ x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight, end: performance.now() + GLITCH_DURATION });
+    return BASE_GLITCH_CHANCE + (MAX_GLITCH_CHANCE - BASE_GLITCH_CHANCE) * Math.min(1, elapsed / FREQUENCY_GROWTH_TIME);
   }
 
   function renderGlitches(): void {
@@ -97,16 +232,17 @@
   function resizeGlitch() { glitchCvs.width = window.innerWidth; glitchCvs.height = window.innerHeight; }
   resizeGlitch();
   window.addEventListener('resize', resizeGlitch);
-  new MutationObserver(() => renderGlitches()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
   function tickGlitch(): void {
-    if (Math.random() < getCurrentGlitchChance()) spawnGlitch();
+    if (Math.random() < getCurrentGlitchChance()) {
+      activeGlitches.push({ x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight, end: performance.now() + GLITCH_DURATION });
+    }
     renderGlitches();
     requestAnimationFrame(tickGlitch);
   }
   tickGlitch();
 
-  // ── Film grain overlay ─────────────────────────
+  // ── Film grain overlay ───────────────────────
   const grainCvs = document.getElementById('grain-canvas') as HTMLCanvasElement;
   const grainCtx = grainCvs.getContext('2d')!;
 
@@ -124,8 +260,8 @@
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) {
       const v = (Math.random() * 255) | 0;
-      d[i] = d[i + 1] = d[i + 2] = v;
-      d[i + 3] = 255;
+      d[i] = d[i+1] = d[i+2] = v;
+      d[i+3] = 255;
     }
     bCtx.putImageData(img, 0, 0);
     grainCtx.drawImage(buf, 0, 0, grainCvs.width, grainCvs.height);
