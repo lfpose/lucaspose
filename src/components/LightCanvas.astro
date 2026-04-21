@@ -130,34 +130,20 @@
   const textCvs = document.getElementById('text-bg') as HTMLCanvasElement;
   const textCtx = textCvs.getContext('2d')!;
 
-  const FONT = '11px "IBM Plex Mono", "Courier New", monospace';
-  const WORDS = [
-    'async','void','λ','∇','diff','push','const','ref','→','∞',
-    'null','fn()','{}','[]','git','ssh','01','10','404','200',
-    '=>','merge','δ','∑','π','∅','~/.','curl','rebase','⊕',
-  ];
+  const FONT = '13px "IBM Plex Mono", "Courier New", monospace';
+  const DENSITY = ' ·:;=+*#'; // low → high density
 
-  type Particle = {
-    text: string; x: number; y: number;
-    vx: number; vy: number; opacity: number; w: number;
-  };
+  // Use pretext to measure exact cell width — no DOM reflow
+  let cellW = 8;
+  const cellH = 18;
 
-  function makeParticle(cvs: HTMLCanvasElement): Particle {
-    const text = WORDS[Math.floor(Math.random() * WORDS.length)];
-    // Use pretext to measure exact rendered width — no DOM reflow
-    const prep = prepareWithSegments(text, FONT);
-    const { lines } = layoutWithLines(prep, 9999, 16);
-    const w = lines[0]?.width ?? 16;
-    return {
-      text,
-      x: Math.random() * cvs.width,
-      y: Math.random() * cvs.height,
-      vx: (Math.random() - 0.5) * 0.18,
-      vy: (Math.random() - 0.5) * 0.18,
-      opacity: Math.random() * 0.10 + 0.08,
-      w,
-    };
-  }
+  document.fonts.ready.then(() => {
+    const prep = prepareWithSegments('#', FONT); // widest char sets cell size
+    const { lines } = layoutWithLines(prep, 9999, cellH);
+    cellW = (lines[0]?.width ?? 8) + 1;
+    resizeText();
+    tickText();
+  });
 
   function resizeText() {
     textCvs.width  = window.innerWidth;
@@ -166,33 +152,56 @@
   resizeText();
   window.addEventListener('resize', resizeText);
 
-  let particles: Particle[] = [];
+  // Domain-warped FBM — same approach as before, lightweight
+  function hash(x: number, y: number): number {
+    const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+    return n - Math.floor(n);
+  }
+  function vnoise(x: number, y: number): number {
+    const ix = Math.floor(x), iy = Math.floor(y);
+    const fx = x - ix, fy = y - iy;
+    const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+    return hash(ix,iy)*(1-ux)*(1-uy) + hash(ix+1,iy)*ux*(1-uy)
+         + hash(ix,iy+1)*(1-ux)*uy   + hash(ix+1,iy+1)*ux*uy;
+  }
+  function fbm(x: number, y: number): number {
+    return vnoise(x,y)*0.5 + vnoise(x*2,y*2)*0.25 + vnoise(x*4,y*4)*0.125;
+  }
+  function fluid(x: number, y: number, t: number): number {
+    const s = 0.05;
+    const qx = fbm(x*s + t*0.10, y*s);
+    const qy = fbm(x*s + 5.2,    y*s + 1.3 + t*0.08);
+    return fbm(x*s + 3.5*qx + t*0.05, y*s + 3.5*qy + t*0.04);
+  }
 
-  document.fonts.ready.then(() => {
-    particles = Array.from({ length: 32 }, () => makeParticle(textCvs));
-    tickText();
-  });
+  let fluidTime = 0;
 
   function tickText() {
+    fluidTime += 0.06;
     textCtx.clearRect(0, 0, textCvs.width, textCvs.height);
     textCtx.font = FONT;
     textCtx.textBaseline = 'top';
 
-    const rgb = isDark() ? '195,208,218' : '105,90,68';
+    const cols = Math.ceil(textCvs.width  / cellW);
+    const rows = Math.ceil(textCvs.height / cellH);
+    const rgb  = isDark() ? '195,208,218' : '105,90,68';
 
-    for (const p of particles) {
-      p.x += p.vx;
-      p.y += p.vy;
-      if (p.x >  textCvs.width  + 40) p.x = -p.w;
-      if (p.x < -p.w - 40)            p.x =  textCvs.width;
-      if (p.y >  textCvs.height + 20) p.y = -16;
-      if (p.y < -16)                  p.y =  textCvs.height;
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const n = fluid(col, row, fluidTime);
+        const b = Math.max(0, Math.min(1, n * 1.4));
+        if (b < 0.12) continue;
 
-      textCtx.fillStyle = `rgba(${rgb},${p.opacity})`;
-      textCtx.fillText(p.text, p.x, p.y);
+        const ci  = Math.min(DENSITY.length - 1, Math.floor(b * DENSITY.length));
+        const ch  = DENSITY[ci];
+        if (ch === ' ') continue;
+
+        textCtx.fillStyle = `rgba(${rgb},${b * 0.22})`;
+        textCtx.fillText(ch, col * cellW, row * cellH);
+      }
     }
 
-    setTimeout(tickText, 80); // ~12fps — deliberately light
+    setTimeout(tickText, 80);
   }
 
   // ── HDMI glitch effect ───────────────────────
