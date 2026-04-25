@@ -1,15 +1,8 @@
 ---
 ---
 
-<!-- Ambient blob background -->
-<div class="blob-bg" aria-hidden="true">
-  <div class="blob blob-1"></div>
-  <div class="blob blob-2"></div>
-  <div class="blob blob-3"></div>
-</div>
-
-<!-- Floating text particles (pretext-measured) -->
-<canvas id="text-bg" aria-hidden="true"></canvas>
+<!-- Labyrinth grid background -->
+<canvas id="maze-bg" aria-hidden="true"></canvas>
 
 <!-- HDMI glitch overlay -->
 <canvas id="glitch-canvas" aria-hidden="true"></canvas>
@@ -18,82 +11,15 @@
 <canvas id="grain-canvas" aria-hidden="true"></canvas>
 
 <style>
-  /* ── Blob background ─────────────────────────── */
-  .blob-bg {
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    overflow: hidden;
-  }
-
-  .blob {
+  /* ── Maze canvas — dark mode only ────────────── */
+  #maze-bg {
     position: absolute;
-    border-radius: 50%;
-    filter: blur(100px);
-  }
-
-  :root[data-theme='dark'] .blob-1 {
-    width: 50vw; height: 50vw;
-    background: radial-gradient(circle, rgba(160,176,192,0.42) 0%, transparent 70%);
-    top: -15%; left: -12%;
-    animation: blob-drift-1 30s ease-in-out infinite;
-  }
-  :root[data-theme='dark'] .blob-2 {
-    width: 40vw; height: 40vw;
-    background: radial-gradient(circle, rgba(120,138,155,0.30) 0%, transparent 70%);
-    bottom: -12%; right: -8%;
-    animation: blob-drift-2 38s ease-in-out infinite;
-  }
-  :root[data-theme='dark'] .blob-3 {
-    width: 30vw; height: 30vw;
-    background: radial-gradient(circle, rgba(180,186,192,0.22) 0%, transparent 70%);
-    top: 45%; left: 58%;
-    animation: blob-drift-3 24s ease-in-out infinite;
-  }
-
-  :root:not([data-theme='dark']) .blob-1 {
-    width: 50vw; height: 50vw;
-    background: radial-gradient(circle, rgba(155,138,112,0.45) 0%, transparent 70%);
-    top: -15%; left: -12%;
-    animation: blob-drift-1 30s ease-in-out infinite;
-  }
-  :root:not([data-theme='dark']) .blob-2 {
-    width: 40vw; height: 40vw;
-    background: radial-gradient(circle, rgba(175,158,132,0.32) 0%, transparent 70%);
-    bottom: -12%; right: -8%;
-    animation: blob-drift-2 38s ease-in-out infinite;
-  }
-  :root:not([data-theme='dark']) .blob-3 {
-    width: 30vw; height: 30vw;
-    background: radial-gradient(circle, rgba(135,118,92,0.24) 0%, transparent 70%);
-    top: 45%; left: 58%;
-    animation: blob-drift-3 24s ease-in-out infinite;
-  }
-
-  @keyframes blob-drift-1 {
-    0%, 100% { transform: translate(0,    0)    scale(1);    }
-    33%       { transform: translate(6vw,  10vh) scale(1.08); }
-    66%       { transform: translate(-4vw, 5vh)  scale(0.94); }
-  }
-  @keyframes blob-drift-2 {
-    0%, 100% { transform: translate(0,    0)    scale(1);    }
-    40%       { transform: translate(-8vw,-8vh)  scale(1.10); }
-    70%       { transform: translate(4vw, -4vh)  scale(0.92); }
-  }
-  @keyframes blob-drift-3 {
-    0%, 100% { transform: translate(0,    0)   scale(1);    }
-    50%       { transform: translate(-5vw, 8vh) scale(1.12); }
-  }
-
-  /* ── Text canvas ─────────────────────────────── */
-  #text-bg {
-    position: fixed;
-    inset: 0;
-    width: 100vw;
-    height: 100vh;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     pointer-events: none;
-    z-index: 1;
+    z-index: 0;
   }
 
   /* ── Glitch + grain ──────────────────────────── */
@@ -113,96 +39,228 @@
     height: 100vh;
     pointer-events: none;
     z-index: 150;
+  }
+  :root[data-theme='dark'] #grain-canvas {
+    opacity: 0.035;
     mix-blend-mode: overlay;
   }
-  :root[data-theme='dark'] #grain-canvas      { opacity: 0.08; }
-  :root:not([data-theme='dark']) #grain-canvas { opacity: 0.05; }
+  :root:not([data-theme='dark']) #grain-canvas {
+    opacity: 0.04;
+    mix-blend-mode: multiply;
+  }
 </style>
 
 <script>
-  import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext';
-
   function isDark(): boolean {
     return document.documentElement.getAttribute('data-theme') === 'dark';
   }
 
-  // ── Floating text particles ──────────────────
-  const textCvs = document.getElementById('text-bg') as HTMLCanvasElement;
-  const textCtx = textCvs.getContext('2d')!;
+  // ── Labyrinth grid ───────────────────────────
+  const cvs = document.getElementById('maze-bg') as HTMLCanvasElement;
+  const ctx = cvs.getContext('2d')!;
 
-  const FONT = '13px "IBM Plex Mono", "Courier New", monospace';
-  const DENSITY = ' ·:;=+*#'; // low → high density
+  const CELL = 52;        // grid spacing
+  const R_CIRCLE = 4.5;   // hollow circle radius
+  const R_DOT = 1.5;      // filled dot radius
+  const GAP = 9;          // line endpoint distance from node center
+  const WALKERS = 10;
+  const DECAY = 0.992;    // edge fade per tick
 
-  // Use pretext to measure exact cell width — no DOM reflow
-  let cellW = 8;
-  const cellH = 18;
+  let cols = 0, rows = 0;
+  let edgesH: Float32Array; // horizontal edges: edgesH[r*cols + c] = edge from (r,c) to (r,c+1)
+  let edgesV: Float32Array; // vertical:           edgesV[r*cols + c] = edge from (r,c) to (r+1,c)
 
-  document.fonts.ready.then(() => {
-    const prep = prepareWithSegments('#', FONT); // widest char sets cell size
-    const { lines } = layoutWithLines(prep, 9999, cellH);
-    cellW = (lines[0]?.width ?? 8) + 1;
-    resizeText();
-    tickText();
+  // Mouse — smoothed so walker bias / glow don't feel jumpy
+  let mouseTargetX = -9999, mouseTargetY = -9999;
+  let mouseX = -9999, mouseY = -9999;
+  let lastSpawnTime = 0;
+  window.addEventListener('mousemove', (e) => {
+    mouseTargetX = e.clientX + window.scrollX;
+    mouseTargetY = e.clientY + window.scrollY;
+    if (mouseX < 0) { mouseX = mouseTargetX; mouseY = mouseTargetY; }
+    // Spawn a walker at cursor occasionally — visible mouse-move feedback
+    const now = performance.now();
+    if (now - lastSpawnTime > 220 && cols > 0) {
+      const r = Math.max(0, Math.min(rows - 1, Math.round(mouseTargetY / CELL)));
+      const c = Math.max(0, Math.min(cols - 1, Math.round(mouseTargetX / CELL)));
+      walkers.push({ r, c, lastDir: Math.floor(Math.random() * 4), life: 50 });
+      lastSpawnTime = now;
+    }
   });
 
-  function resizeText() {
-    textCvs.width  = window.innerWidth;
-    textCvs.height = window.innerHeight;
-  }
-  resizeText();
-  window.addEventListener('resize', resizeText);
-
-  // Domain-warped FBM — same approach as before, lightweight
-  function hash(x: number, y: number): number {
-    const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
-    return n - Math.floor(n);
-  }
-  function vnoise(x: number, y: number): number {
-    const ix = Math.floor(x), iy = Math.floor(y);
-    const fx = x - ix, fy = y - iy;
-    const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
-    return hash(ix,iy)*(1-ux)*(1-uy) + hash(ix+1,iy)*ux*(1-uy)
-         + hash(ix,iy+1)*(1-ux)*uy   + hash(ix+1,iy+1)*ux*uy;
-  }
-  function fbm(x: number, y: number): number {
-    return vnoise(x,y)*0.5 + vnoise(x*2,y*2)*0.25 + vnoise(x*4,y*4)*0.125;
-  }
-  function fluid(x: number, y: number, t: number): number {
-    const s = 0.05;
-    const qx = fbm(x*s + t*0.10, y*s);
-    const qy = fbm(x*s + 5.2,    y*s + 1.3 + t*0.08);
-    return fbm(x*s + 3.5*qx + t*0.05, y*s + 3.5*qy + t*0.04);
+  function resize() {
+    cvs.width  = window.innerWidth;
+    cvs.height = Math.max(
+      document.documentElement.scrollHeight,
+      document.body.scrollHeight,
+      document.body.offsetHeight,
+      window.innerHeight,
+    );
+    cols = Math.ceil(cvs.width  / CELL) + 1;
+    rows = Math.ceil(cvs.height / CELL) + 1;
+    edgesH = new Float32Array(rows * cols);
+    edgesV = new Float32Array(rows * cols);
   }
 
-  let fluidTime = 0;
+  // Walkers — biased random walk to make recognisable corridors
+  type Walker = { r: number; c: number; lastDir: number; life: number };
+  const walkers: Walker[] = [];
 
-  function tickText() {
-    fluidTime += 0.06;
-    textCtx.clearRect(0, 0, textCvs.width, textCvs.height);
-    textCtx.font = FONT;
-    textCtx.textBaseline = 'top';
+  function spawnWalker(): Walker {
+    return {
+      r: Math.floor(Math.random() * rows),
+      c: Math.floor(Math.random() * cols),
+      lastDir: Math.floor(Math.random() * 4),
+      life: 80 + Math.floor(Math.random() * 80),
+    };
+  }
 
-    const cols = Math.ceil(textCvs.width  / cellW);
-    const rows = Math.ceil(textCvs.height / cellH);
-    const rgb  = isDark() ? '195,208,218' : '105,90,68';
+  // 0=up, 1=right, 2=down, 3=left
+  const DR = [-1, 0, 1, 0];
+  const DC = [0, 1, 0, -1];
 
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        const n = fluid(col, row, fluidTime);
-        const b = Math.max(0, Math.min(1, n * 1.4));
-        if (b < 0.12) continue;
+  function stepWalker(w: Walker) {
+    let dir;
+    // 35% bias toward mouse if it's been seen; otherwise default behaviour
+    if (mouseX > 0 && Math.random() < 0.35) {
+      const wx = w.c * CELL, wy = w.r * CELL;
+      const dx = mouseX - wx, dy = mouseY - wy;
+      if (Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? 1 : 3;
+      else                              dir = dy > 0 ? 2 : 0;
+    } else if (Math.random() < 0.6) {
+      dir = w.lastDir;
+    } else {
+      dir = (w.lastDir + (Math.random() < 0.5 ? 1 : 3)) % 4;
+    }
+    const nr = w.r + DR[dir];
+    const nc = w.c + DC[dir];
+    if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) {
+      // bounce: pick a new direction next tick
+      w.lastDir = (w.lastDir + 2) % 4;
+      return;
+    }
+    // Light up the edge between (w.r, w.c) and (nr, nc)
+    if (dir === 1)      edgesH[w.r * cols + w.c] = 1;
+    else if (dir === 3) edgesH[w.r * cols + nc]  = 1;
+    else if (dir === 2) edgesV[w.r * cols + w.c] = 1;
+    else                edgesV[nr  * cols + w.c] = 1;
+    w.r = nr; w.c = nc;
+    w.lastDir = dir;
+    w.life--;
+  }
 
-        const ci  = Math.min(DENSITY.length - 1, Math.floor(b * DENSITY.length));
-        const ch  = DENSITY[ci];
-        if (ch === ' ') continue;
+  function updateWalkers() {
+    for (let i = walkers.length - 1; i >= 0; i--) {
+      stepWalker(walkers[i]);
+      if (walkers[i].life <= 0) walkers.splice(i, 1);
+    }
+    while (walkers.length < WALKERS) walkers.push(spawnWalker());
+  }
 
-        textCtx.fillStyle = `rgba(${rgb},${b * 0.22})`;
-        textCtx.fillText(ch, col * cellW, row * cellH);
+  function decay() {
+    for (let i = 0; i < edgesH.length; i++) {
+      edgesH[i] *= DECAY;
+      edgesV[i] *= DECAY;
+    }
+  }
+
+  // Ink colour is theme-aware: red for dark, forest-green for light (monochrome each)
+  function ink(): string {
+    return isDark() ? '220,40,50' : '14,36,23';
+  }
+  const GLOW_R = 260; // halo radius for mouse glow
+
+  function nodeGlow(x: number, y: number): number {
+    if (mouseX < 0) return 0;
+    const dx = x - mouseX, dy = y - mouseY;
+    const d = Math.sqrt(dx*dx + dy*dy);
+    if (d > GLOW_R) return 0;
+    const t = 1 - d / GLOW_R;
+    return t * t * 0.55; // soft falloff, max +0.55
+  }
+
+  // Per-theme subtlety: dark stays a bit more present, light is whisper-quiet
+  function subtle(): number { return isDark() ? 0.85 : 0.35; }
+
+  // Deterministic per-edge bow offset for curvature — gives the maze a hand-drawn feel
+  const BOW = 5;
+  function bowH(r: number, c: number): number {
+    return Math.sin(r * 12.9898 + c * 78.233) * BOW;
+  }
+  function bowV(r: number, c: number): number {
+    return Math.sin(r * 39.346 + c * 11.135) * BOW;
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+    const RGB = ink();
+    const S = subtle();
+
+    // Nodes — hollow circle + filled dot. Brighter near cursor.
+    ctx.lineWidth = 1;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const x = c * CELL, y = r * CELL;
+        const g = nodeGlow(x, y);
+        ctx.strokeStyle = `rgba(${RGB},${(0.16 + g * 0.4) * S})`;
+        ctx.beginPath();
+        ctx.arc(x, y, R_CIRCLE, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = `rgba(${RGB},${(0.45 + g * 0.5) * S})`;
+        ctx.beginPath();
+        ctx.arc(x, y, R_DOT, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
-    setTimeout(tickText, 80);
+    // Edges — gently curved, gentle flicker, glow boost near cursor
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 1.4;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const x = c * CELL, y = r * CELL;
+        const h = edgesH[r * cols + c];
+        if (h > 0.04 && c < cols - 1) {
+          const g = nodeGlow(x + CELL / 2, y);
+          const fl = 0.7 + Math.random() * 0.3; // gentler flicker (0.7 - 1.0)
+          ctx.strokeStyle = `rgba(${RGB},${Math.min(1, (h * 0.85 * fl + g * 0.4) * S)})`;
+          ctx.beginPath();
+          ctx.moveTo(x + GAP, y);
+          ctx.quadraticCurveTo(x + CELL / 2, y + bowH(r, c), x + CELL - GAP, y);
+          ctx.stroke();
+        }
+        const v = edgesV[r * cols + c];
+        if (v > 0.04 && r < rows - 1) {
+          const g = nodeGlow(x, y + CELL / 2);
+          const fl = 0.7 + Math.random() * 0.3;
+          ctx.strokeStyle = `rgba(${RGB},${Math.min(1, (v * 0.85 * fl + g * 0.4) * S)})`;
+          ctx.beginPath();
+          ctx.moveTo(x, y + GAP);
+          ctx.quadraticCurveTo(x + bowV(r, c), y + CELL / 2, x, y + CELL - GAP);
+          ctx.stroke();
+        }
+      }
+    }
   }
+
+  function tick() {
+    // Smooth the mouse position toward target so glow & walker-bias don't snap
+    if (mouseTargetX > 0) {
+      mouseX += (mouseTargetX - mouseX) * 0.18;
+      mouseY += (mouseTargetY - mouseY) * 0.18;
+    }
+    updateWalkers();
+    decay();
+    render();
+    setTimeout(tick, 60); // ~16fps
+  }
+
+  resize();
+  window.addEventListener('resize', resize);
+  window.addEventListener('load', resize);
+  new ResizeObserver(resize).observe(document.body);
+  for (let i = 0; i < WALKERS; i++) walkers.push(spawnWalker());
+  tick();
 
   // ── HDMI glitch effect ───────────────────────
   const glitchCvs = document.getElementById('glitch-canvas') as HTMLCanvasElement;
@@ -217,15 +275,11 @@
   const activeGlitches: Glitch[] = [];
   const startTime = performance.now();
 
-  function getGlitchColor(): string {
-    return isDark() ? '#00CCCC' : '#008B8B';
-  }
-
+  function getGlitchColor(): string { return isDark() ? '#00CCCC' : '#008B8B'; }
   function getCurrentGlitchChance(): number {
     const elapsed = performance.now() - startTime;
     return BASE_GLITCH_CHANCE + (MAX_GLITCH_CHANCE - BASE_GLITCH_CHANCE) * Math.min(1, elapsed / FREQUENCY_GROWTH_TIME);
   }
-
   function renderGlitches(): void {
     const now = performance.now();
     for (let i = activeGlitches.length - 1; i >= 0; i--) {
@@ -237,11 +291,9 @@
       glitchCtx.fillRect(g.x + (Math.random() - 0.5) * 2, g.y + (Math.random() - 0.5) * 2, 2, 2);
     }
   }
-
   function resizeGlitch() { glitchCvs.width = window.innerWidth; glitchCvs.height = window.innerHeight; }
   resizeGlitch();
   window.addEventListener('resize', resizeGlitch);
-
   function tickGlitch(): void {
     if (Math.random() < getCurrentGlitchChance()) {
       activeGlitches.push({ x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight, end: performance.now() + GLITCH_DURATION });

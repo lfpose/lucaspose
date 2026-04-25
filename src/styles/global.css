@@ -1,20 +1,20 @@
 :root {
-  /* Light = warm monochrome */
-  --fg: #3A3834;
-  --fg-muted: #6b6860;
-  --bg: #EAE7E1;
-  --accent: #8a8780;
-  --rule: #b8b5b0;
-  --paper-tint: rgba(0, 0, 0, 0);
+  /* Light = monochrome cream */
+  --fg: #0e2417;
+  --fg-muted: #4a5a3a;
+  --bg: #ece1c0;
+  --accent: #0e2417;
+  --rule: #b4a786;
+  --paper-tint: rgba(14, 36, 23, 0.04);
   --max-width: 40rem;
 }
 
 :root[data-theme='dark'] {
   --fg: #DDD8D0;
   --fg-muted: #a8a49c;
-  --bg: #2F2D2A;
-  --accent: #8a8780;
-  --rule: #454340;
+  --bg: #000000;
+  --accent: #d12830;
+  --rule: #3a3835;
   --paper-tint: rgba(255, 255, 255, 0);
 }
 
@@ -22,8 +22,9 @@
 * { box-sizing: border-box; }
 
 html {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  font-size: 17px;
+  font-family: 'IM Fell English', Georgia, serif;
+  font-style: normal;
+  font-size: 19px;
   line-height: 1.65;
   color: var(--fg);
   background: var(--bg);
@@ -60,10 +61,11 @@ header {
 header nav {
   display: flex;
   gap: 1.5rem;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
-  font-size: 1rem;
-  font-weight: 500;
-  letter-spacing: -0.005em;
+  font-family: 'Silkscreen', monospace;
+  font-size: 0.7rem;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
 header nav a {
@@ -132,23 +134,23 @@ header nav a[aria-current='page']::after {
 :root[data-theme='dark'] #theme-toggle .icon-moon { display: none; }
 
 h1 {
-  font-family: 'Space Grotesk', system-ui, sans-serif;
-  font-weight: 600;
-  font-size: 2rem;
+  font-family: 'IM Fell English SC', Georgia, serif;
+  font-weight: 400;
+  font-size: 2.6rem;
   line-height: 1.15;
   margin: 0 0 1rem;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.02em;
   min-height: 1lh; /* prevent layout collapse during scramble */
 }
 
 h2 {
-  font-family: 'Space Grotesk', system-ui, sans-serif;
-  font-weight: 500;
-  font-size: 1.25rem;
+  font-family: 'IM Fell English SC', Georgia, serif;
+  font-weight: 400;
+  font-size: 1.5rem;
   margin: 2.25rem 0 0.75rem;
   position: relative;
   display: inline-block;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.04em;
   min-height: 1lh; /* prevent layout collapse during scramble */
 }
 
@@ -216,13 +218,15 @@ a:hover {
 strong { font-weight: 700; }
 
 .ticker {
-  font-family: ui-monospace, "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
-  font-size: 0.85rem;
+  font-family: 'Silkscreen', monospace;
+  font-size: 0.7rem;
   color: var(--fg-muted);
   margin-bottom: 1.5rem;
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .ticker-label {
@@ -231,6 +235,10 @@ strong { font-weight: 700; }
 
 .ticker-text {
   color: var(--fg);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 ul {
@@ -258,8 +266,10 @@ footer {
   padding-top: 1rem;
   border-top: 1px dashed var(--rule);
   color: var(--fg-muted);
-  font-size: 0.85rem;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 0.65rem;
+  font-family: 'Silkscreen', monospace;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
 .section-divider {
@@ -287,10 +297,10 @@ footer {
   align-items: center;
   justify-content: center;
   padding: 0;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
-  font-size: 0.62rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-family: 'Silkscreen', monospace;
+  font-size: 0.55rem;
+  font-weight: 400;
+  letter-spacing: 0.1em;
 }
 #lang-toggle:hover {
   background: var(--paper-tint);
@@ -307,3 +317,4 @@ footer {
 @media (max-width: 520px) {
   h1 { font-size: 1.9rem; }
 }
+

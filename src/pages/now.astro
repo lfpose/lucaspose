@@ -1,12 +1,15 @@
 ---
 import Base from '../layouts/Base.astro';
+import TitleRow from '../components/TitleRow.astro';
 
 const lastUpdated = '2026-04-10';
 ---
 
 <Base title="Now · Lucas Pose" description="What Lucas is working on right now.">
-  <h1 class="lang-en">Now</h1>
-  <h1 class="lang-es">Ahora</h1>
+  <TitleRow level="h1" size={36} variant="hourglass">
+    <h1 class="lang-en">Now</h1>
+    <h1 class="lang-es">Ahora</h1>
+  </TitleRow>
 
   <p class="lang-en">
     <em>
@@ -21,8 +24,10 @@ const lastUpdated = '2026-04-10';
     </em>
   </p>
 
-  <h2 class="lang-en">Work</h2>
-  <h2 class="lang-es">Trabajo</h2>
+  <TitleRow level="h2" variant="work">
+    <h2 class="lang-en">Work</h2>
+    <h2 class="lang-es">Trabajo</h2>
+  </TitleRow>
   <p class="lang-en">
     Front-end engineering at Inform, a highly data-intensive logistics
     application in React and TypeScript. Most of my energy goes into the
@@ -36,8 +41,33 @@ const lastUpdated = '2026-04-10';
     el rendimiento.
   </p>
 
-  <h2 class="lang-en">Learning &amp; exploring</h2>
-  <h2 class="lang-es">Aprendiendo &amp; explorando</h2>
+  <TitleRow level="h2" variant="projects">
+    <h2 class="lang-en">Building</h2>
+    <h2 class="lang-es">Construyendo</h2>
+  </TitleRow>
+  <p class="lang-en">A handful of side projects, all built with AI-assisted development:</p>
+  <p class="lang-es">Varios proyectos personales, todos construidos con ayuda de IA:</p>
+  <ul class="lang-en">
+    <li><strong>Terra</strong> &mdash; a planet RTS game (plants and space).</li>
+    <li><strong>Baki</strong> &mdash; gym membership management app.</li>
+    <li><strong>Doslucas</strong> &mdash; personal finance, bank statements into Actual.</li>
+    <li><strong>IELTS / language tool</strong> &mdash; learning aid, possibly pivoting beyond IELTS.</li>
+    <li><strong>Roko</strong> &mdash; a 24/7 second-brain companion agent.</li>
+    <li><strong>This site</strong> &mdash; constantly tinkered with.</li>
+  </ul>
+  <ul class="lang-es">
+    <li><strong>Terra</strong> &mdash; un juego RTS planetario (plantas y espacio).</li>
+    <li><strong>Baki</strong> &mdash; app de gestión de membresías de gimnasio.</li>
+    <li><strong>Doslucas</strong> &mdash; finanzas personales, importando estados bancarios a Actual.</li>
+    <li><strong>IELTS / herramienta de idiomas</strong> &mdash; aprendizaje, posiblemente más allá de IELTS.</li>
+    <li><strong>Roko</strong> &mdash; un agente companion de "segundo cerebro" 24/7.</li>
+    <li><strong>Este sitio</strong> &mdash; en constante refinamiento.</li>
+  </ul>
+
+  <TitleRow level="h2" variant="book">
+    <h2 class="lang-en">Learning &amp; exploring</h2>
+    <h2 class="lang-es">Aprendiendo &amp; explorando</h2>
+  </TitleRow>
   <ul class="lang-en">
     <li>Autonomous software development using the Ralph technique.</li>
     <li>Setting up the pi agent for my own workflow.</li>
@@ -51,17 +81,17 @@ const lastUpdated = '2026-04-10';
     <li>Probando otras herramientas de agentes IA.</li>
   </ul>
 
-  <h2 class="lang-en">Outside the screen</h2>
-  <h2 class="lang-es">Fuera de la pantalla</h2>
+  <TitleRow level="h2" variant="mountain">
+    <h2 class="lang-en">Outside the screen</h2>
+    <h2 class="lang-es">Fuera de la pantalla</h2>
+  </TitleRow>
   <ul class="lang-en">
     <li>Climbing and weightlifting.</li>
-    <li>Chess, StarCraft, and AOE2.</li>
-    <li>Guitar, a bit abandoned.</li>
+    <li>Chess, RTS games.</li>
   </ul>
   <ul class="lang-es">
     <li>Escalada y pesas.</li>
-    <li>Ajedrez, StarCraft y AOE2.</li>
-    <li>Guitarra, un poco abandonada.</li>
+    <li>Ajedrez, juegos RTS.</li>
   </ul>
 
   <p style="color:var(--fg-muted);font-size:0.85rem;margin-top:2rem;">

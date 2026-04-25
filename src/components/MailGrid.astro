@@ -1,0 +1,132 @@
+---
+const EMAIL = 'posemerani@gmail.com';
+const FILLER_POOL = 'abcdefghijklmnopqrstuvwxyz0123456789';
+const COLS = 7;
+const ROWS = 6;
+const E_ROW_MIN = 2, E_ROW_MAX = 5;
+const E_COL_MIN = 2, E_COL_MAX = 6;
+
+type Cell = { char: string; row: number; col: number; on: boolean };
+const cells: Cell[] = [];
+let emailIdx = 0;
+
+for (let row = 1; row <= ROWS; row++) {
+  for (let col = 1; col <= COLS; col++) {
+    const inMiddle = row >= E_ROW_MIN && row <= E_ROW_MAX
+                  && col >= E_COL_MIN && col <= E_COL_MAX;
+    if (inMiddle && emailIdx < EMAIL.length) {
+      cells.push({ char: EMAIL[emailIdx], row, col, on: true });
+      emailIdx++;
+    } else {
+      cells.push({
+        char: FILLER_POOL[Math.floor(Math.random() * FILLER_POOL.length)],
+        row, col,
+        on: false,
+      });
+    }
+  }
+}
+
+// Shuffle DOM order so HTML scrapers see jumbled text
+const shuffled = [...cells].sort(() => Math.random() - 0.5);
+---
+
+<div class="mail-grid" aria-label="Email puzzle">
+  {shuffled.map((cell) => (
+    <span
+      class:list={['mc', cell.on ? 'mc-on' : 'mc-off']}
+      style={`grid-row:${cell.row};grid-column:${cell.col}`}
+      data-final={cell.char}
+    >{cell.char}</span>
+  ))}
+</div>
+
+<style>
+  .mail-grid {
+    display: inline-grid;
+    grid-template-columns: repeat(7, 1.85em);
+    grid-template-rows: repeat(6, 1.85em);
+    gap: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.02em;
+    margin: 0.4rem 0 0.6rem;
+    user-select: none;
+    perspective: 240px;
+  }
+  .mc {
+    width: 1.85em;
+    height: 1.85em;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    border: 1px solid var(--rule);
+    border-radius: 1px;
+    line-height: 1;
+    transition: transform 220ms cubic-bezier(0.4, 0, 0.6, 1);
+    transform-origin: center;
+    backface-visibility: hidden;
+  }
+  .mc.mc-flipping {
+    transform: rotateX(90deg);
+  }
+  .mc-on {
+    color: var(--bg);
+    background: var(--fg);
+    border-color: var(--fg);
+    font-weight: 700;
+  }
+  .mc-off {
+    color: var(--fg-muted);
+    opacity: 0.45;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mc { transition: none; }
+    .mc.mc-flipping { transform: none; }
+  }
+</style>
+
+<script>
+  // Solari split-flap board: each cell does ONE flip per scheduled event.
+  //   tilt 0deg → 90deg (220ms, edge-on / invisible) → swap glyph → tilt 90deg → 0deg (220ms)
+  // Cells alternate between their final glyph and a random char.
+  const POOL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@.';
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const HALF_FLIP_MS = 220;
+
+  function delay(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
+  async function flipOnce(el: HTMLElement, target: string): Promise<void> {
+    el.classList.add('mc-flipping');
+    await delay(HALF_FLIP_MS);     // wait for tilt-down to finish (cell now edge-on)
+    el.textContent = target;       // swap glyph while invisible
+    el.classList.remove('mc-flipping');
+    await delay(HALF_FLIP_MS);     // wait for tilt-back to finish
+  }
+
+  function scheduleNext(el: HTMLElement) {
+    const final = el.dataset.final ?? el.textContent ?? '';
+    const atFinal = el.textContent === final;
+    // Sit longer at final state; restore from random faster
+    const wait = atFinal
+      ? 5000 + Math.random() * 13000   // 5-18s at final
+      : 1500 + Math.random() * 3000;   // 1.5-4.5s at random
+    setTimeout(async () => {
+      if (!document.hidden) {
+        const target = (el.textContent === final)
+          ? POOL[Math.floor(Math.random() * POOL.length)]
+          : final;
+        await flipOnce(el, target);
+      }
+      scheduleNext(el);
+    }, wait);
+  }
+
+  if (!reduced) {
+    document.querySelectorAll<HTMLElement>('.mail-grid .mc').forEach(scheduleNext);
+  }
+</script>

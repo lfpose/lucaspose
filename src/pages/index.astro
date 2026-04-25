@@ -1,11 +1,15 @@
 ---
 import Base from '../layouts/Base.astro';
+import TitleRow from '../components/TitleRow.astro';
+import MailGrid from '../components/MailGrid.astro';
 const base = import.meta.env.BASE_URL;
 ---
 
 <Base title="Lucas Pose" description="Lucas Pose, software engineer in Santiago, Chile.">
-  <h1 class="lang-en">Hi, I'm Lucas.</h1>
-  <h1 class="lang-es">Hola, soy Lucas.</h1>
+  <TitleRow level="h1" size={36} variant="eye">
+    <h1 class="lang-en">Hi, I'm Lucas.</h1>
+    <h1 class="lang-es">Hola, soy Lucas.</h1>
+  </TitleRow>
 
   <p class="ticker lang-en">
     <span class="ticker-label">[now]</span>
@@ -44,20 +48,28 @@ const base = import.meta.env.BASE_URL;
     y herramientas de agentes IA.
   </p>
 
-  <hr class="section-divider">
+  <TitleRow level="h2" variant="chess">
+    <h2 class="lang-en">Interests</h2>
+    <h2 class="lang-es">Intereses</h2>
+  </TitleRow>
 
-  <h2 class="lang-en">Interests</h2>
-  <h2 class="lang-es">Intereses</h2>
+  <ul class="lang-en">
+    <li>Chess.</li>
+    <li>Climbing.</li>
+    <li>RTS games (on screen).</li>
+    <li>Guitar (a bit abandoned).</li>
+  </ul>
+  <ul class="lang-es">
+    <li>Ajedrez.</li>
+    <li>Escalada.</li>
+    <li>Juegos RTS (en pantalla).</li>
+    <li>Guitarra (un poco abandonada).</li>
+  </ul>
 
-  <p class="lang-en interests-text">
-    Chess, climbing, StarCraft, and Age of Empires 2.
-  </p>
-  <p class="lang-es interests-text">
-    Ajedrez, escalada, StarCraft y Age of Empires 2.
-  </p>
-
-  <h2 class="lang-en">Elsewhere</h2>
-  <h2 class="lang-es">En la red</h2>
+  <TitleRow level="h2" variant="compass">
+    <h2 class="lang-en">Elsewhere</h2>
+    <h2 class="lang-es">En la red</h2>
+  </TitleRow>
   <ul>
     <li><a href="https://github.com/lfpose">GitHub</a></li>
   </ul>
@@ -68,4 +80,10 @@ const base = import.meta.env.BASE_URL;
   <p class="lang-es">
     Ver <a href={`${base}now`}>en qué estoy trabajando ahora</a>.
   </p>
+
+  <TitleRow level="h2" variant="mail">
+    <h2 class="lang-en">Reach me</h2>
+    <h2 class="lang-es">Contacto</h2>
+  </TitleRow>
+  <MailGrid />
 </Base>

@@ -26,7 +26,7 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
     <title>{title}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IM+Fell+English+SC&family=IM+Fell+English:ital@0;1&family=Silkscreen:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <script is:inline>
       (function () {
         try {
@@ -47,6 +47,20 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
     </script>
   </head>
   <body>
+    <!-- SVG filter defs (woodcut / rough-edge) -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <filter id="rough-edge" x="-2%" y="-2%" width="104%" height="104%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="2" seed="3" />
+          <feDisplacementMap in="SourceGraphic" scale="1.1" />
+        </filter>
+        <filter id="woodcut" x="-3%" y="-3%" width="106%" height="106%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="7" />
+          <feDisplacementMap in="SourceGraphic" scale="1.4" />
+        </filter>
+      </defs>
+    </svg>
+
     <LightCanvas />
 
     <main>
@@ -81,15 +95,10 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
       </footer>
     </main>
 
-    <!-- Glitch height preservation - prevents layout shift during animations -->
+    <!-- Typewriter height preservation - prevents layout shift during reveal -->
     <style>
-      main h1, main h2, main li, main footer {
-        min-height: 1.2em;
-        font-family: 'IBM Plex Mono', 'Courier New', monospace;
-      }
-      main li, main footer {
-        min-height: 1.6em;
-      }
+      main h1, main h2 { min-height: 1.2em; }
+      main li, main footer { min-height: 1.6em; }
     </style>
 
     <!-- Theme toggle -->
@@ -116,56 +125,25 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
 
     <!-- Glitch scramble for headings & links (limited ASCII charset) -->
     <script>
-      // Small dot-like symbols and punctuation to prevent layout shift and improve aesthetics
-      const GLITCH = ".,'`·•∙-+<>[]~^*&";
-      
-      // Track mouse position for mouse-aware glitch effect
-      let mouseX = 0;
-      let mouseY = 0;
-      window.addEventListener('mousemove', (e) => {
-        mouseX = e.clientX;
-        mouseY = e.clientY;
-      });
-
-      function pickGlyph(): string {
-        return GLITCH[Math.floor(Math.random() * GLITCH.length)];
-      }
-
-      // Replace every non-space char with a random glyph (preserves layout height)
+      // Replace every non-space char with a blank (preserves layout width/height)
       function makeNoise(text: string): string {
-        return [...text].map(ch => (ch === ' ' || ch === '\n') ? ch : pickGlyph()).join('');
+        return [...text].map(ch => (ch === ' ' || ch === '\n') ? ch : ' ').join('');
       }
 
-      // Scramble el's textContent toward `target`, with mouse-aware wave effect
+      // Typewriter — left-to-right reveal toward target, blanks for unrevealed chars
       function scramble(el: HTMLElement, target: string, duration = 900, onDone?: () => void) {
         const start = performance.now();
         let completed = false;
-        
+
         function finish() {
           if (completed) return;
           completed = true;
           el.textContent = target;
           onDone?.();
         }
-        
-        // Safety fallback: force completion after duration + buffer
-        const safetyTimeout = setTimeout(() => {
-          finish();
-        }, duration + 100);
-        
-        // Get element position to calculate distance from mouse
-        const rect = el.getBoundingClientRect();
-        const elCenterX = rect.left + rect.width / 2;
-        const elCenterY = rect.top + rect.height / 2;
-        
-        // Calculate distance from mouse to element center
-        const dx = mouseX - elCenterX;
-        const dy = mouseY - elCenterY;
-        const mouseDist = Math.sqrt(dx * dx + dy * dy);
-        
-        // Mouse angle relative to element center
-        const mouseAngle = Math.atan2(dy, dx);
-        
+
+        const safetyTimeout = setTimeout(finish, duration + 100);
+
         function step(now: number) {
           const t = Math.min(1, (now - start) / duration);
           if (t >= 1) {
@@ -173,30 +151,12 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
             finish();
             return;
           }
-          
-          // Wave spreads outward from mouse position
-          const waveRadius = Math.max(rect.width, rect.height) * 1.5 * t;
-          
+          const revealed = Math.floor(target.length * t);
           let out = '';
           for (let i = 0; i < target.length; i++) {
-            // Calculate approximate character position in element
-            const charProgress = i / target.length;
-            const charX = rect.left + rect.width * charProgress;
-            const charY = rect.top + rect.height / 2;
-            
-            // Calculate distance from mouse to this character
-            const cdx = charX - mouseX;
-            const cdy = charY - mouseY;
-            const charDist = Math.sqrt(cdx * cdx + cdy * cdy);
-            
-            // Character is revealed if it's within the wave radius
-            if (charDist <= waveRadius) {
-              out += target[i];
-            } else if (target[i] === ' ' || target[i] === '\n') {
-              out += target[i];
-            } else {
-              out += pickGlyph();
-            }
+            if (i < revealed)                                 out += target[i];
+            else if (target[i] === ' ' || target[i] === '\n') out += target[i];
+            else                                              out += ' ';
           }
           el.textContent = out;
           requestAnimationFrame(step);
@@ -232,7 +192,7 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
       function attachHoverScramble(el: HTMLElement, duration: number) {
         let busy = false;
         let currentTarget = '';
-        
+
         el.addEventListener('mouseenter', () => {
           if (busy) return;
           
@@ -259,22 +219,7 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
         });
       }
 
-      // Hover scramble — headings
-      document.querySelectorAll<HTMLElement>('h1, h2').forEach((el) => {
-        attachHoverScramble(el, 500);
-      });
-
-      // Hover scramble — links (skip nav links that contain span children)
-      document.querySelectorAll<HTMLAnchorElement>('a').forEach((a) => {
-        if (a.children.length > 0) return;
-        attachHoverScramble(a, 360);
-      });
-
-      // Hover scramble — footer and list items (skip elements with child elements)
-      document.querySelectorAll<HTMLElement>('li, footer').forEach((el) => {
-        if (el.children.length > 0) return;
-        attachHoverScramble(el, 650);
-      });
+      // Hover retype disabled — typewriter only runs on initial page load.
     </script>
 
     <!-- Ticker: canvas-rendered via pretext for per-character spectrum animation -->
@@ -328,7 +273,7 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
           const { lines } = layoutWithLines(prep, 9999, lineH);
           if (lines[0]) maxW = Math.max(maxW, lines[0].width);
         }
-        maxW += pCtx.measureText('▌').width + 6;
+        maxW = Math.ceil(maxW * 1.05) + pCtx.measureText('▌').width + 24;
 
         const dpr = devicePixelRatio;
         const cvs = document.createElement('canvas');

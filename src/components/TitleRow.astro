@@ -1,0 +1,21 @@
+---
+import Sigil from './Sigil.astro';
+const { level = 'h2', size = 28, variant = 'eye' } = Astro.props;
+---
+
+<div class={`title-row title-row-${level}`}>
+  <Sigil size={size} variant={variant} />
+  <slot />
+</div>
+
+<style>
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+  }
+  .title-row-h1 { margin: 0 0 1rem; }
+  .title-row-h2 { margin: 2.25rem 0 0.75rem; }
+  .title-row :global(h1),
+  .title-row :global(h2) { margin: 0; }
+</style>
