@@ -129,7 +129,28 @@ const { size = 84 } = Astro.props;
     let spin = 0;
     let lastPaint = 0;
     const FRAME_MS = 80;            // ~12fps — slow rotation, low CPU
-    const SPIN_PER_FRAME = 0.012;
+    const SPIN_BASE = 0.012;
+    const SPIN_HOVER = 0.06;        // ~5x base while cursor is over the planet
+    let targetSpinRate = SPIN_BASE;
+    let currentSpinRate = SPIN_BASE;
+
+    // Hover detection: planet is z-index:-1 + pointer-events:none, so listen on
+    // document and check distance to its visible rect. Inside an expanded radius,
+    // ramp spin up; outside, ramp it back down. Linear easing in/out.
+    window.addEventListener('mousemove', (e) => {
+      const rect = cvs.getBoundingClientRect();
+      const cxr = rect.left + rect.width / 2;
+      const cyr = rect.top + rect.height / 2;
+      const dx = e.clientX - cxr;
+      const dy = e.clientY - cyr;
+      const HOVER_R = rect.width * 0.7; // a touch wider than the planet
+      targetSpinRate = (dx*dx + dy*dy < HOVER_R * HOVER_R) ? SPIN_HOVER : SPIN_BASE;
+    });
+    window.addEventListener('mouseleave', () => { targetSpinRate = SPIN_BASE; });
+
+    // Repaint immediately when the theme toggles so the planet picks up the new palette.
+    new MutationObserver(() => { lastPaint = 0; })
+      .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
     function shadeBand(light: number): number {
       if      (light >  0.55) return 1.00;
@@ -198,7 +219,9 @@ const { size = 84 } = Astro.props;
       }
 
       ctx.putImageData(img, 0, 0);
-      spin += SPIN_PER_FRAME;
+      // Ease spin rate toward target — smooth ramp on hover enter/leave.
+      currentSpinRate += (targetSpinRate - currentSpinRate) * 0.10;
+      spin += currentSpinRate;
       requestAnimationFrame(render);
     }
     requestAnimationFrame(render);

@@ -63,11 +63,11 @@
   const R_CIRCLE = 4.5;   // hollow circle radius
   const R_DOT = 1.5;      // filled dot radius
   const GAP = 9;          // line endpoint distance from node center
-  const WALKERS = 12;
-  const DECAY = 0.985;          // intensity fade per tick — passed-through paths fade quickly
-  const GROW_EASE = 0.18;       // ease-out toward full length
-  const SHRINK_EASE = 0.14;     // ease-out back to 0
-  const SHRINK_AT = 0.32;       // start shrinking sooner so trails clear faster
+  const WALKERS = 6;
+  const DECAY = 0.94;           // intensity fade per tick — trails clear behind cursor
+  const GROW_EASE = 0.22;       // ease-out toward full length
+  const SHRINK_EASE = 0.20;     // ease-out back to 0
+  const SHRINK_AT = 0.5;        // start shrinking sooner so trails clear faster
   // phase: 0 = growing, 1 = live, 2 = shrinking
 
   let cols = 0, rows = 0;
@@ -90,10 +90,10 @@
     if (mouseX < 0) { mouseX = mouseTargetX; mouseY = mouseTargetY; }
     // Spawn a walker at cursor occasionally — visible mouse-move feedback
     const now = performance.now();
-    if (now - lastSpawnTime > 90 && cols > 0) {
+    if (now - lastSpawnTime > 250 && cols > 0) {
       const r = Math.max(0, Math.min(rows - 1, Math.round(mouseTargetY / CELL)));
       const c = Math.max(0, Math.min(cols - 1, Math.round(mouseTargetX / CELL)));
-      walkers.push({ r, c, lastDir: Math.floor(Math.random() * 4), life: 75 });
+      walkers.push({ r, c, lastDir: Math.floor(Math.random() * 4), life: 25 });
       lastSpawnTime = now;
     }
   });
@@ -289,6 +289,36 @@
     return t * t * 0.85; // softer falloff, stronger peak
   }
 
+  // Footer planet acts as a star — pulls nearby grid points toward it like a gravity well.
+  // Peak bend at LENS_R, smooth falloff on both sides, exponential damping past LENS_FAR.
+  // Lens shape: bell curve peaks at r=LENS_R, exponential damping past LENS_FAR.
+  // Tuned for strong pull right at the planet, quick falloff after that.
+  const LENS_R = 70;
+  const LENS_MAX = 80;
+  const LENS_FAR = 160;
+  let lensX = -9999, lensY = -9999;
+  function updateLensCenter() {
+    // Read from .planet-small (the fixed canvas) so the lens follows the planet's
+    // visible position as the user scrolls.
+    const el = document.querySelector<HTMLElement>('.planet-small');
+    if (!el) { lensX = -9999; return; }
+    const rect = el.getBoundingClientRect();
+    lensX = rect.left + rect.width / 2 + window.scrollX;
+    lensY = rect.top  + rect.height / 2 + window.scrollY;
+  }
+  const LENS_CUTOFF2 = 600 * 600;
+  function lens(x: number, y: number): [number, number] {
+    if (lensX < 0) return [x, y];
+    const dx = x - lensX, dy = y - lensY;
+    const r2 = dx*dx + dy*dy;
+    if (r2 > LENS_CUTOFF2) return [x, y]; // far from planet — skip costly math
+    const r = Math.sqrt(r2);
+    if (r < 0.5) return [x, y];
+    const disp = (2 * LENS_R * LENS_MAX * r) / (r2 + LENS_R * LENS_R);
+    const d = disp * Math.exp(-r / LENS_FAR);
+    return [x - (dx / r) * d, y - (dy / r) * d];
+  }
+
   // Per-theme subtlety: dark stays a bit more present, light is whisper-quiet
   function subtle(): number { return isDark() ? 0.85 : 0.35; }
 
@@ -306,19 +336,20 @@
     const RGB = ink();
     const S = subtle();
 
-    // Nodes — hollow circle + filled dot. Brighter near cursor.
+    // Nodes — hollow circle + filled dot. Brighter near cursor, lensed by mouse-star.
     ctx.lineWidth = 1;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const x = c * CELL, y = r * CELL;
         const g = nodeGlow(x, y);
+        const [lx, ly] = lens(x, y);
         ctx.strokeStyle = `rgba(${RGB},${(0.16 + g * 0.4) * S})`;
         ctx.beginPath();
-        ctx.arc(x, y, R_CIRCLE, 0, Math.PI * 2);
+        ctx.arc(lx, ly, R_CIRCLE, 0, Math.PI * 2);
         ctx.stroke();
         ctx.fillStyle = `rgba(${RGB},${(0.45 + g * 0.5) * S})`;
         ctx.beginPath();
-        ctx.arc(x, y, R_DOT, 0, Math.PI * 2);
+        ctx.arc(lx, ly, R_DOT, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -335,13 +366,13 @@
         const h = edgesH[idx], lh = lenH[idx];
         if (h > 0.04 && lh > 0.015 && c < cols - 1) {
           const g = nodeGlow(x + CELL / 2, y);
-          const fl = 0.7 + Math.random() * 0.3;
-          ctx.strokeStyle = `rgba(${RGB},${Math.min(1, (h * 0.85 * fl + g * 0.4) * S)})`;
+          ctx.strokeStyle = `rgba(${RGB},${Math.min(1, (h * 0.85 + g * 0.4) * S)})`;
+          const [p0x, p0y] = lens(x + GAP,        y);
+          const [p1x, p1y] = lens(x + CELL / 2,   y + bowH(r, c));
+          const [p2x, p2y] = lens(x + CELL - GAP, y);
           ctx.beginPath();
           drawPartialQuad(
-            x + GAP,        y,
-            x + CELL / 2,   y + bowH(r, c),
-            x + CELL - GAP, y,
+            p0x, p0y, p1x, p1y, p2x, p2y,
             lh, dirH[idx] === 0,
           );
           ctx.stroke();
@@ -350,13 +381,13 @@
         const v = edgesV[idx], lv = lenV[idx];
         if (v > 0.04 && lv > 0.015 && r < rows - 1) {
           const g = nodeGlow(x, y + CELL / 2);
-          const fl = 0.7 + Math.random() * 0.3;
-          ctx.strokeStyle = `rgba(${RGB},${Math.min(1, (v * 0.85 * fl + g * 0.4) * S)})`;
+          ctx.strokeStyle = `rgba(${RGB},${Math.min(1, (v * 0.85 + g * 0.4) * S)})`;
+          const [p0x, p0y] = lens(x,                y + GAP);
+          const [p1x, p1y] = lens(x + bowV(r, c),   y + CELL / 2);
+          const [p2x, p2y] = lens(x,                y + CELL - GAP);
           ctx.beginPath();
           drawPartialQuad(
-            x, y + GAP,
-            x + bowV(r, c), y + CELL / 2,
-            x, y + CELL - GAP,
+            p0x, p0y, p1x, p1y, p2x, p2y,
             lv, dirV[idx] === 0,
           );
           ctx.stroke();
@@ -364,37 +395,27 @@
       }
     }
 
-    // Walkers as discrete organisms — body + soft halo, gentle pulse per organism
-    const t = performance.now() * 0.005;
+    // Walkers — a single small dim point. No halo, no pulse, no random.
     for (let i = 0; i < walkers.length; i++) {
       const w = walkers[i];
-      const x = w.c * CELL, y = w.r * CELL;
-      const lifeT = Math.max(0, Math.min(1, w.life / 80));
-      const pulse = 0.85 + 0.15 * Math.sin(t + i * 1.7);
-      const a = lifeT * pulse;
-
-      // Outer halo
-      ctx.fillStyle = `rgba(${RGB},${0.06 * S * a})`;
-      ctx.beginPath(); ctx.arc(x, y, 18, 0, Math.PI * 2); ctx.fill();
-      // Mid halo
-      ctx.fillStyle = `rgba(${RGB},${0.16 * S * a})`;
-      ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
-      // Body
-      ctx.fillStyle = `rgba(${RGB},${0.95 * S * a})`;
-      ctx.beginPath(); ctx.arc(x, y, 2.4, 0, Math.PI * 2); ctx.fill();
+      const [wx, wy] = lens(w.c * CELL, w.r * CELL);
+      const a = Math.max(0, Math.min(1, w.life / 80));
+      ctx.fillStyle = `rgba(${RGB},${0.55 * S * a})`;
+      ctx.beginPath(); ctx.arc(wx, wy, 1.8, 0, Math.PI * 2); ctx.fill();
     }
   }
 
   function tick() {
     // Smooth the mouse position toward target so glow & walker-bias don't snap
     if (mouseTargetX > 0) {
-      mouseX += (mouseTargetX - mouseX) * 0.18;
-      mouseY += (mouseTargetY - mouseY) * 0.18;
+      mouseX += (mouseTargetX - mouseX) * 0.20;
+      mouseY += (mouseTargetY - mouseY) * 0.20;
     }
+    updateLensCenter();
     updateWalkers();
     updateEdges();
     render();
-    setTimeout(tick, 60); // ~16fps
+    setTimeout(tick, 55); // ~18fps — calmer, lower CPU
   }
 
   resize();
