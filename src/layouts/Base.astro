@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 import LightCanvas from '../components/LightCanvas.astro';
+import FooterPlanet from '../components/FooterPlanet.astro';
 
 interface Props {
   title: string;
@@ -90,6 +91,7 @@ const isNow = path.startsWith(`${base}now`) || path.startsWith(`${base.replace(/
         </div>
       </header>
       <slot />
+      <FooterPlanet />
       <footer>
         © {new Date().getFullYear()} Lucas Pose · Santiago, Chile
       </footer>

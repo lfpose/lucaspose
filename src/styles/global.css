@@ -28,6 +28,36 @@ html {
   line-height: 1.65;
   color: var(--fg);
   background: var(--bg);
+  /* Print-shop niceties: ligatures, oldstyle figures, kerning */
+  font-feature-settings: 'liga' 1, 'dlig' 1, 'kern' 1, 'onum' 1;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── Marked text — selection looks like a wax-stamp on parchment ──── */
+::selection {
+  background: var(--accent);
+  color: var(--bg);
+  text-shadow: none;
+}
+::-moz-selection {
+  background: var(--accent);
+  color: var(--bg);
+  text-shadow: none;
+}
+
+/* ── Drop cap on the lead paragraph — illuminated-manuscript opener ─ */
+main > p.lead::first-letter {
+  font-family: 'IM Fell English SC', Georgia, serif;
+  font-size: 3.6em;
+  line-height: 0.85;
+  float: left;
+  margin: 0.08em 0.14em 0 -0.04em;
+  color: var(--accent);
+  font-weight: 400;
+}
+:root[data-theme='dark'] main > p.lead::first-letter {
+  color: var(--accent);
+  /* Same color in dark — d12830 reads great on black */
 }
 
 body {

@@ -1,0 +1,206 @@
+---
+interface Props {
+  size?: number;
+}
+const { size = 84 } = Astro.props;
+---
+
+<div class="planet-slot" style={`width:${size}px;height:${size}px`}>
+  <canvas class="planet-small" width={size} height={size} aria-hidden="true"></canvas>
+</div>
+
+<style define:vars={{ planetSize: `${size}px` }}>
+  .planet-slot {
+    margin: 2.5rem auto 0;
+    width: var(--planetSize);
+    height: var(--planetSize);
+  }
+  .planet-small {
+    width: 100%;
+    height: 100%;
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+</style>
+
+<script>
+  // Small footer planet — flat-shaded Lambertian sphere with FBM terrain.
+  // Slow Y-axis spin. Theme-aware palette (Earth-ish in light, red in dark).
+  const cvs = document.querySelector<HTMLCanvasElement>('.planet-small');
+  if (cvs) {
+    const ctx = cvs.getContext('2d')!;
+    const W = cvs.width;
+    const H = cvs.height;
+    const img = ctx.createImageData(W, H);
+    const data = img.data;
+
+    const cx = W / 2;
+    const cy = H / 2;
+    const r = Math.min(W, H) / 2 - 1;
+    const r2 = r * r;
+
+    // Light from upper-left, slightly toward camera
+    const _Lx = -0.5, _Ly = -0.55, _Lz = 0.67;
+    const _Lm = Math.sqrt(_Lx*_Lx + _Ly*_Ly + _Lz*_Lz);
+    const lx = _Lx / _Lm, ly = _Ly / _Lm, lz = _Lz / _Lm;
+
+    function isDark(): boolean {
+      return document.documentElement.getAttribute('data-theme') === 'dark';
+    }
+
+    type Palette = { ocean: number[]; land: number[]; coast: number[] };
+    function palette(): Palette {
+      if (isDark()) {
+        return {
+          ocean: [60, 14, 18],
+          land:  [220, 40, 50],
+          coast: [150, 28, 34],
+        };
+      }
+      return {
+        ocean: [40, 75, 145],
+        land:  [78, 116, 56],
+        coast: [156, 138, 92],
+      };
+    }
+
+    // ── Cheap value-noise FBM ─────────────────────────────────────
+    function hash3(x: number, y: number, z: number): number {
+      const h = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
+      return h - Math.floor(h);
+    }
+    function smoothT(t: number): number { return t * t * (3 - 2 * t); }
+    function noise3(x: number, y: number, z: number): number {
+      const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+      const u = smoothT(x - xi), v = smoothT(y - yi), w = smoothT(z - zi);
+      const c000 = hash3(xi,   yi,   zi);
+      const c100 = hash3(xi+1, yi,   zi);
+      const c010 = hash3(xi,   yi+1, zi);
+      const c110 = hash3(xi+1, yi+1, zi);
+      const c001 = hash3(xi,   yi,   zi+1);
+      const c101 = hash3(xi+1, yi,   zi+1);
+      const c011 = hash3(xi,   yi+1, zi+1);
+      const c111 = hash3(xi+1, yi+1, zi+1);
+      const x00 = c000 + u * (c100 - c000);
+      const x10 = c010 + u * (c110 - c010);
+      const x01 = c001 + u * (c101 - c001);
+      const x11 = c011 + u * (c111 - c011);
+      const y0 = x00 + v * (x10 - x00);
+      const y1 = x01 + v * (x11 - x01);
+      return y0 + w * (y1 - y0);
+    }
+    function fbm3(x: number, y: number, z: number, oct = 3): number {
+      let amp = 0.5, freq = 1, sum = 0, max = 0;
+      for (let i = 0; i < oct; i++) {
+        sum += amp * noise3(x * freq, y * freq, z * freq);
+        max += amp;
+        amp *= 0.5;
+        freq *= 2;
+      }
+      return sum / max;
+    }
+
+    // ── Pre-baked terrain texture: ocean / coast / land only ──────
+    const TEX_W = 128;
+    const TEX_H = 64;
+    const tex = new Uint8Array(TEX_W * TEX_H);
+    {
+      const SCALE = 1.55;
+      const SEED  = 17.3;
+      for (let j = 0; j < TEX_H; j++) {
+        const lat = (j / TEX_H - 0.5) * Math.PI;
+        const cosL = Math.cos(lat), sinL = Math.sin(lat);
+        for (let i = 0; i < TEX_W; i++) {
+          const lon = (i / TEX_W - 0.5) * 2 * Math.PI;
+          const x = cosL * Math.sin(lon);
+          const y = sinL;
+          const z = cosL * Math.cos(lon);
+          const n = fbm3(x * SCALE + SEED, y * SCALE + SEED, z * SCALE + SEED, 3);
+          let kind: number;
+          if (n > 0.60)      kind = 1;
+          else if (n > 0.52) kind = 2;
+          else                kind = 0;
+          tex[j * TEX_W + i] = kind;
+        }
+      }
+    }
+
+    let spin = 0;
+    let lastPaint = 0;
+    const FRAME_MS = 80;            // ~12fps — slow rotation, low CPU
+    const SPIN_PER_FRAME = 0.012;
+
+    function shadeBand(light: number): number {
+      if      (light >  0.55) return 1.00;
+      else if (light >  0.20) return 0.80;
+      else if (light > -0.10) return 0.56;
+      else if (light > -0.45) return 0.30;
+      else                    return 0.14;
+    }
+
+    function render(now: number) {
+      if (now - lastPaint < FRAME_MS) {
+        requestAnimationFrame(render);
+        return;
+      }
+      lastPaint = now;
+
+      const pal = palette();
+      const cosS = Math.cos(spin), sinS = Math.sin(spin);
+
+      data.fill(0);
+
+      const minPx = Math.max(0, Math.floor(cx - r));
+      const maxPx = Math.min(W - 1, Math.ceil(cx + r));
+      const minPy = Math.max(0, Math.floor(cy - r));
+      const maxPy = Math.min(H - 1, Math.ceil(cy + r));
+
+      for (let py = minPy; py <= maxPy; py++) {
+        const dy = py + 0.5 - cy;
+        for (let px = minPx; px <= maxPx; px++) {
+          const dx = px + 0.5 - cx;
+          const d2 = dx*dx + dy*dy;
+          if (d2 > r2) continue;
+
+          const nz = Math.sqrt(r2 - d2);
+          const nxn = dx / r, nyn = dy / r, nzn = nz / r;
+          const light = nxn * lx + nyn * ly + nzn * lz;
+
+          const x2 = nxn * cosS - nzn * sinS;
+          const y2 = nyn;
+          const z2 = nxn * sinS + nzn * cosS;
+
+          const yc = y2 < -1 ? -1 : y2 > 1 ? 1 : y2;
+          const lat = Math.asin(yc);
+          const lon = Math.atan2(x2, z2);
+          const u = (lon + Math.PI) / (2 * Math.PI);
+          const v = (lat + Math.PI / 2) / Math.PI;
+          let ti = (u * TEX_W) | 0;
+          if (ti >= TEX_W) ti = TEX_W - 1;
+          if (ti < 0) ti = 0;
+          let tj = (v * TEX_H) | 0;
+          if (tj >= TEX_H) tj = TEX_H - 1;
+          if (tj < 0) tj = 0;
+          const kind = tex[tj * TEX_W + ti];
+
+          const mat = kind === 0 ? pal.ocean
+                    : kind === 1 ? pal.land
+                    :              pal.coast;
+          const s = shadeBand(light);
+
+          const idx = (py * W + px) * 4;
+          data[idx]     = (mat[0] * s) | 0;
+          data[idx + 1] = (mat[1] * s) | 0;
+          data[idx + 2] = (mat[2] * s) | 0;
+          data[idx + 3] = 255;
+        }
+      }
+
+      ctx.putImageData(img, 0, 0);
+      spin += SPIN_PER_FRAME;
+      requestAnimationFrame(render);
+    }
+    requestAnimationFrame(render);
+  }
+</script>
