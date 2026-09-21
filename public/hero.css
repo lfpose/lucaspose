@@ -1,5 +1,5 @@
 .hero-type {
-  top: 26%;
+  top: 23%;
   z-index: 2;
 }
 
@@ -18,7 +18,7 @@
 .hero-grain {
   position: absolute;
   inset: 0;
-  z-index: 4;
+  z-index: 10;
   display: block;
   width: 100%;
   height: 100%;
@@ -34,10 +34,10 @@
 }
 
 @media (max-width: 1050px) {
-  .hero-type { top: 28%; }
+  .hero-type { top: 25%; }
 }
 
 @media (max-width: 650px) {
-  .hero-type { top: 28%; }
+  .hero-type { top: 25%; }
   .hero-foreground { object-position: 69% center; }
 }
