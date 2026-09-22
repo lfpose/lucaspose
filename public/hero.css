@@ -1,19 +1,45 @@
-.hero-type { top:23%; z-index:2; }
+/* Name anchored to the water line: the lake horizon sits at ~50% of the
+   background image and object-position keeps it at the hero's vertical
+   centre at every viewport, so bottom-anchoring keeps the name just above it. */
+.hero-type { top:auto; bottom:47%; z-index:2; }
+.hero-type .eyebrow {
+ font-size:13px; letter-spacing:1.4px; margin:0 0 6px;
+ color:#f3dc7a; text-shadow:0 1px 2px #1c221a, 0 0 14px #1c221acc;
+}
+h1 { padding-bottom:.04em; }
 .photo { background:var(--ink); }
 .photo img,.hero-foreground {
  position:absolute; inset:0; display:block; width:100%; height:100%;
  object-fit:cover; object-position:60% 50%;
- transform:translate3d(0,var(--photo-shift,0px),0);
+ will-change:transform;
 }
-.hero-foreground {z-index:3;pointer-events:none;}
 /* Both photographs share a 3:2 coordinate system. Never scale them independently. */
+.photo img { transform:translate3d(var(--bg-x,0px),var(--bg-shift,0px),0) scale(1.04); }
+.hero-foreground { z-index:3; pointer-events:none;
+ transform:translate3d(var(--fg-x,0px),var(--fg-shift,0px),0) scale(1.02); transform-origin:50% 100%; }
 .photo canvas,.photo-shade {display:none;}
 .period,.dot {color:var(--yellow);}
+/* Old-film light pass: leaks/halation/flicker screened over the photo, vignette/dust in normal blend.
+   Above the portrait (3), below the scroll grain (4) and the nav (5). */
+.hero-film-light,.hero-film-dark {position:absolute;inset:0;z-index:4;width:100%;height:100%;pointer-events:none;}
+.hero-film-light {mix-blend-mode:screen;opacity:.9;}
+.hero-film-dark {opacity:.9;}
+/* Hero-only grain that thickens as you scroll away (0 → .6 opacity), above the portrait, below the nav */
+.hero-grain-scroll {position:absolute;inset:0;z-index:4;width:100%;height:100%;opacity:calc(var(--grain-scroll,0)*.6);mix-blend-mode:overlay;pointer-events:none;}
 .hero-grain {position:fixed;inset:0;z-index:10;width:100%;height:100%;opacity:.15;mix-blend-mode:soft-light;pointer-events:none;}
-.topbar,.hero-bottom,.hero-foot {z-index:5;}
-@media(max-width:1050px){.hero-type{top:25%;}}
+.topbar,.hero-bottom {z-index:5;}
+
+/* Readable yellow UI over the clouds: text attributes only, no boxes */
+.topbar nav a, .topbar .signature, .hero-type .eyebrow, .hero-description {
+ text-shadow:0 1px 1px #1c221a, 0 0 10px #1c221a, 0 0 22px #1c221a99;
+}
+.topbar nav a { font-weight:600; font-size:15px; letter-spacing:.2px; color:#f3dc7a; }
+.topbar nav a:hover { color:#fff1a8; border-color:transparent; text-decoration:underline; text-underline-offset:6px; }
+
+@media(max-width:1050px){.hero-type{bottom:47%;}}
 @media(max-width:650px){
  .photo img,.hero-foreground{object-position:69% center;}
- .hero-type{top:25%;}
+ .hero-type{bottom:47%;}
+ .hero-type .eyebrow{font-size:10px;margin-bottom:4px;}
 }
 @media(prefers-reduced-motion:reduce){.photo img,.hero-foreground{transform:none;}}
