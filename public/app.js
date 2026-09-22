@@ -1,35 +1,26 @@
-(()=>{'use strict';
-const $=s=>document.querySelector(s),reduced=matchMedia('(prefers-reduced-motion: reduce)');let paused=reduced.matches,time=0,last=0,raf=0;const scenes=[];
-function context(canvas){return canvas.getContext('webgl',{alpha:false,antialias:false,depth:false,powerPreference:'high-performance'});}
-function program(gl,vertex,fragment){function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;}const p=gl.createProgram();gl.attachShader(p,compile(gl.VERTEX_SHADER,vertex));gl.attachShader(p,compile(gl.FRAGMENT_SHADER,fragment));gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));gl.useProgram(p);return p;}
-function uniformMap(gl,p,names){const result={};for(const name of names)result[name]=gl.getUniformLocation(p,'u'+name);return result;}
-function watch(scene){scenes.push(scene);new IntersectionObserver(entries=>{scene.visible=entries[0].isIntersecting;if(scene.visible){scene.draw(0);start();}},{rootMargin:'80px'}).observe(scene.canvas);new ResizeObserver(()=>{scene.resize();scene.draw(0);}).observe(scene.canvas);scene.canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();scene.ready=false;scene.canvas.classList.remove('ready');});scene.canvas.addEventListener('webglcontextrestored',()=>location.reload());scene.resize();}
-function initFilm(){const canvas=$('#film'),gl=context(canvas);if(!gl){return;}
-const p=program(gl,`attribute vec2 aPosition;varying vec2 vUv;void main(){vUv=aPosition*.5+.5;gl_Position=vec4(aPosition,0.,1.);}`,`precision highp float;varying vec2 vUv;uniform sampler2D uPhoto;uniform vec2 uSize,uMouse;uniform float uTime,uFocus,uBloom,uAspect;
-float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}
-void main(){vec2 uv=vUv;float imageAspect=1.5;if(uAspect<imageAspect){float f=uAspect/imageAspect;uv.x=uv.x*f+(1.-f)*mix(.69,.60,smoothstep(.7,1.4,uAspect));}else{float f=imageAspect/uAspect;uv.y=(uv.y-.5)*f+.5;}
-vec2 blur=vec2(1./1536.,1./1024.)*(uFocus*5.+uBloom*2.8);vec3 col=texture2D(uPhoto,uv).rgb*.24;col+=texture2D(uPhoto,uv+vec2(blur.x,0.)).rgb*.13;col+=texture2D(uPhoto,uv-vec2(blur.x,0.)).rgb*.13;col+=texture2D(uPhoto,uv+vec2(0.,blur.y)).rgb*.13;col+=texture2D(uPhoto,uv-vec2(0.,blur.y)).rgb*.13;col+=texture2D(uPhoto,uv+blur*1.8).rgb*.06;col+=texture2D(uPhoto,uv-blur*1.8).rgb*.06;col+=texture2D(uPhoto,uv+vec2(blur.x,-blur.y)*1.8).rgb*.06;col+=texture2D(uPhoto,uv+vec2(-blur.x,blur.y)*1.8).rgb*.06;
-float phase=fract(uTime/52.);float travel=smoothstep(.16,.43,phase)-smoothstep(.65,.92,phase);
-vec2 center=vec2(.20+travel*.18,.64-travel*.045);vec2 d=vUv-center;d.x*=uAspect;
-float patch=exp(-dot(d,d*vec2(1.5,3.6))*3.2);float edgeLeak=exp(-pow(vUv.x*11.,2.))*(.5+.5*patch);
-float strength=.058+uBloom*.14;
-vec3 warmth=vec3(1.,.67,.29)*(patch*strength+edgeLeak*(.016+uBloom*.025));
-float luma=dot(col,vec3(.299,.587,.114));col=mix(vec3(luma),col,.86);col=(col-.5)*.94+.5;col*=vec3(1.025,1.012,.987);
-col=1.-(1.-col)*(1.-warmth);float grain=(hash(gl_FragCoord.xy)-.5)*.012;col+=grain;
-gl_FragColor=vec4(col,1.);}`);
-const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);const a=gl.getAttribLocation(p,'aPosition');gl.enableVertexAttribArray(a);gl.vertexAttribPointer(a,2,gl.FLOAT,false,0,0);const U=uniformMap(gl,p,['Photo','Size','Mouse','Time','Focus','Bloom','Aspect']);let x=.24,y=.58,focus=.10,bloom=0,hold=0,pulse=0;
-const scene={canvas,visible:true,ready:false,resize(){const r=canvas.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,1.6);canvas.width=Math.max(1,Math.round(r.width*d));canvas.height=Math.max(1,Math.round(r.height*d));gl.viewport(0,0,canvas.width,canvas.height);gl.uniform2f(U.Size,canvas.width,canvas.height);gl.uniform1f(U.Aspect,Math.max(1,r.width)/Math.max(1,r.height));},draw(dt){if(!scene.ready)return;const k=1-Math.exp(-dt*5);pulse=Math.max(0,pulse-dt*.22);bloom+=(Math.max(hold,pulse)-bloom)*(paused?1:k);gl.uniform2f(U.Mouse,x,y);gl.uniform1f(U.Time,time);gl.uniform1f(U.Focus,focus);gl.uniform1f(U.Bloom,bloom);gl.drawArrays(gl.TRIANGLES,0,6);}};
-canvas.addEventListener('pointerenter',()=>{hold=.12;});
-canvas.addEventListener('pointerdown',e=>{hold=.7;canvas.setPointerCapture(e.pointerId);if(paused)scene.draw(0);});
-function release(){hold=0;if(paused)scene.draw(0);}canvas.addEventListener('pointerup',release);canvas.addEventListener('pointercancel',release);canvas.addEventListener('lostpointercapture',release);canvas.addEventListener('pointerleave',release);
-const img=new Image();img.onload=()=>{const texture=gl.createTexture();gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,img);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.uniform1i(U.Photo,0);scene.ready=true;scene.draw(0);canvas.classList.add('ready');};img.onerror=()=>{canvas.style.display='none';};img.src='lucas-lake-background.jpg';watch(scene);}
-try{initFilm();}catch(e){0'#film').style.display='none';console.error(e);}
-const animations=new Set();
-function animate(el,keyframes,options){if(paused||!el.animate)return;const a=el.animate(keyframes,options);animations.add(a);a.onfinish=()=>animations.delete(a);}
-if(!paused){animate($('.name-line'),[{transform:'translateY(108%)'},{transform:'translateY(0)'}],{duration:1250,delay:120,easing:'cubic-bezier(.16,1,.3,1)',fill:'backwards'});document.querySelectorAll('.enter').forEach((el,i)=>animate(el,[{opacity:0,transform:'translateY(14px)'},{opacity:1,transform:'translateY(0)'}],{duration:950,delay:200+i*130,easing:'cubic-bezier(.22,1,.36,1)',fill:'backwards'}));}
-const revealed=new WeakSet();const observer=new IntersectionObserver(entries=>{for(const entry of entries){if(!entry.isIntersecting||revealed.has(entry.target))continue;revealed.add(entry.target);observer.unobserve(entry.target);animate(entry.target,[{opacity:.25,transform:'translateY(24px)'},{opacity:1,transform:'translateY(0)'}],{duration:850,easing:'cubic-bezier(.22,1,.36,1)'});}},{threshold:.15});document.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
-function syncMotion(){if(paused)for(const a of animations){a.finish();}document.body.classList.toggle('motion-paused',paused);}
-function frame(now){raf=0;const dt=Math.min((now-last)/1000,.04);last=now;time+=dt;for(const s of scenes)if(s.visible)s.draw(dt);if(!paused&&!document.hidden)raf=requestAnimationFrame(frame);}
-function start(){if(raf||paused||document.hidden)return;last=performance.now();raf=requestAnimationFrame(frame);}
-reduced.addEventListener('change',e=>{paused=e.matches;syncMotion();if(paused){cancelAnimationFrame(raf);raf=0;}else start();});document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelAnimationFrame(raf);raf=0;}else start();});syncMotion();start();
+(()=>{
+'use strict';
+const hero=document.querySelector('.hero');
+const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+let frame=0,visible=true;
+function render(){
+ frame=0;
+ const progress=Math.min(Math.max(scrollY,0),hero.offsetHeight);
+ hero.style.setProperty('--photo-shift',reduced.matches?'0px':(-progress*.035).toFixed(2)+'px');
+}
+function schedule(){if(!frame&&visible&&!document.hidden)frame=requestAnimationFrame(render);}
+addEventListener('scroll',schedule,{passive:true});
+addEventListener('resize',schedule,{passive:true});
+reduced.addEventListener('change',render);
+document.addEventListener('visibilitychange',schedule);
+new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;if(visible)schedule();}).observe(hero);
+function reveal(el,delay=0){
+ if(reduced.matches||!el.animate)return;
+ el.animate([{opacity:0,transform:'translateY(12px)'},{opacity:1,transform:'translateY(0)'}],
+ {duration:850,delay,easing:'cubic-bezier(.16,1,.3,1)',fill:'backwards'});
+}
+document.querySelectorAll('.enter').forEach((el,i)=>reveal(el,100+i*80));
+const observer=new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){reveal(e.target);observer.unobserve(e.target);}},{threshold:.12});
+document.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
+render();
 })();
