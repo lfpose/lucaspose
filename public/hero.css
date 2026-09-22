@@ -2,7 +2,7 @@
 .photo { background:var(--ink); }
 .photo img,.hero-foreground {
  position:absolute; inset:0; display:block; width:100%; height:100%;
- object-fit:contain; object-position:right bottom;
+ object-fit:cover; object-position:60% 50%;
  transform:translate3d(0,var(--photo-shift,0px),0);
 }
 .hero-foreground {z-index:3;pointer-events:none;}
@@ -13,7 +13,7 @@
 .topbar,.hero-bottom,.hero-foot {z-index:5;}
 @media(max-width:1050px){.hero-type{top:25%;}}
 @media(max-width:650px){
- .photo img,.hero-foreground{object-position:center bottom;}
+ .photo img,.hero-foreground{object-position:69% center;}
  .hero-type{top:25%;}
 }
 @media(prefers-reduced-motion:reduce){.photo img,.hero-foreground{transform:none;}}
